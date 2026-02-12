@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MCPServer}",
+            "name": "Debug MCPServer",
+            "target": "MCPServer",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug MCPServer"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MCPServer}",
+            "name": "Release MCPServer",
+            "target": "MCPServer",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release MCPServer"
+        }
+    ]
+}
