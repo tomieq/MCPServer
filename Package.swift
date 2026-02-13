@@ -6,7 +6,9 @@ import PackageDescription
 let package = Package(
     name: "MCPServer",
     dependencies: [
-        .package(url: "https://github.com/tomieq/swifter.git", .upToNextMajor(from: "3.1.1"))
+        .package(url: "https://github.com/tomieq/swifter.git", .upToNextMajor(from: "3.1.1")),
+        .package(url: "https://github.com/tomieq/Logger.git", .upToNextMajor(from: "1.1.0")),
+        .package(url: "https://github.com/tomieq/SwiftExtensions", .upToNextMajor(from: "1.0.0"))
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -14,8 +16,11 @@ let package = Package(
         .executableTarget(
             name: "MCPServer",
             dependencies: [
-                .product(name: "Swifter", package: "Swifter")
+                .product(name: "Swifter", package: "Swifter"),
+                .product(name: "Logger", package: "Logger"),
+                .product(name: "SwiftExtensions", package: "SwiftExtensions")
             ]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

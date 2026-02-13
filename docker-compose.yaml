@@ -1,0 +1,17 @@
+networks:
+  home-network:
+    name: home-network
+
+services:
+
+  mpc:
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - 8093:8080
+    container_name: mcp
+    hostname: mcp
+    restart: always
+    networks:
+      - home-network
+
