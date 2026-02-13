@@ -54,7 +54,7 @@ class ModelContextProtocol {
                 .init(petID: 3, kind: "chomik", name: "Zosia")
             ]
             
-            dto = ToolResult([pets.json!])
+            dto = ToolResult(pets.compactMap { $0.json })
         case "get_pet_price":
             dto = ToolResult(["\(Int.random(in: 25...100)) zł"])
         default:
