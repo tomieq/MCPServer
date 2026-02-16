@@ -14,4 +14,6 @@ services:
     restart: always
     networks:
       - home-network
+    volumes:
+      - /Users/user/dev/LokiAgent/Sources:/project
 

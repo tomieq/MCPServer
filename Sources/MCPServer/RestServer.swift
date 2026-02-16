@@ -24,8 +24,8 @@ class RestServer {
                 ))
         }
         server.post["/mcp"] = { [unowned self] request, _ in
-            logger.d("body: \(request.body.string!)")
-            let command: Command = try request.body.decode()
+            logger.d("body: \(request.body.string?.json ?? request.body.string.or("")) queryParams: \(request.queryParams.dict)")
+            let command: Command<NoArguments> = try request.body.decode()
             logger.i("command: \(command)")
             
             switch command.method {
@@ -38,7 +38,10 @@ class RestServer {
                 let response = mcp.list(id: command.id.or(0))
                 return .ok(.json(response))
             case "tools/call":
-                let response = mcp.function(id: command.id.or(0), name: command.params?.name ?? "")
+                let response = try mcp.function(id: command.id.or(0),
+                                                name: command.params?.name ?? "",
+                                                body: request.body,
+                )
                 logger.d(response.json!)
                 return .ok(.json(response))
             default:

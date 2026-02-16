@@ -6,6 +6,7 @@
 //
 import Foundation
 import SwiftExtensions
+import Swifter
 
 class ModelContextProtocol {
     func initialize(id: Int) -> MCPResponse<Initialize> {
@@ -20,43 +21,122 @@ class ModelContextProtocol {
     
     func list(id: Int) -> MCPResponse<ToolsList> {
         let dto = ToolsList([
-            .init(name: "get_pets",
-                  description: "Returns an array of objects with all possible pets (petID, kind, name)",
+            
+            .init(name: "list_files",
+                  description: "Returns the tree structure of all files in the project.",
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [:],
                                   required: [])
                  ),
-            .init(name: "get_pet_price",
-                  description: "Returns the price of given pet. Call it for one of the pets from get_pets. If you want prices for many pets, you need to call this multiple times.",
+            .init(name: "read_file",
+                  description: "Use this tool if you need to view the contents of an existing file.",
                   inputSchema:
                     ToolParameter(type: "object",
-                                  properties: ["petID": .init(type: "text", description: "petID of returned from get_pets")],
-                                  required: ["petID"])
-                 )
-           ])
+                                  properties: [
+                                    "filepath": .init(type: "text", description: "The absolute path of the file to read")
+                                  ],
+                                  required: ["filepath"])
+                 ),
+            .init(name: "rename_file",
+                  description: "Use this tool if you need to chnage the file's name or move the file within the project",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "oldFilepath": .init(type: "text", description: "Current absolute path of the file"),
+                                    "newFilepath": .init(type: "text", description: "New absolute path of to be set for the file")
+                                  ],
+                                  required: ["oldFilepath", "newFilepath"])
+                 ),
+            .init(name: "override_file",
+                  description: "Use this tool if you need to override the content of an existing file.",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "filepath": .init(type: "text", description: "The absolute path of the file to write to"),
+                                    "content": .init(type: "text", description: "The utf8 content to write")
+                                  ],
+                                  required: ["filepath", "content"])
+                 ),
+            .init(name: "create_file",
+                  description: "Create a new file. Only use this when a file doesn't exist and should be created",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "filepath": .init(type: "text", description: "The absolute path of the file to create"),
+                                    "content": .init(type: "text", description: "The utf8 content to write")
+                                  ],
+                                  required: ["filepath", "content"])
+                 ),
+        ])
         return MCPResponse(id: id, dto)
     }
     
-    func function(id: Int, name: String) -> MCPResponse<ToolResult> {
+    func function(id: Int, name: String, body: HttpRequestBody) throws -> MCPResponse<ToolResult> {
         let dto: ToolResult
         switch name {
-        case "get_pets":
+        case "list_files":
+            let folder = Folder("/project/")
+            dto = ToolResult(folder.files())
+        case "read_file":
             
-            struct Pet: Codable {
-                let petID: Int
-                let kind: String
-                let name: String
+            struct File: Codable {
+                let filepath: String
             }
-            let pets: [Pet] = [
-                .init(petID: 1, kind: "kot", name: "Hetman"),
-                .init(petID: 2, kind: "pies", name: "Reksio"),
-                .init(petID: 3, kind: "chomik", name: "Zosia")
-            ]
+            let command: Command<File> = try body.decode()
+            let filepath = command.params?.arguments?.filepath ?? ""
+            logger.d("Read file content from: \(command.params?.arguments?.filepath ?? "")")
+            let content = try? String(contentsOfFile: filepath, encoding: .utf8)
+            dto = ToolResult([content.or("File not found at \(filepath)")])
+        case "rename_file":
+            struct Action: Codable {
+                let oldFilepath: String
+                let newFilepath: String
+            }
+            let command: Command<Action> = try body.decode()
+            let filepath = command.params?.arguments?.oldFilepath ?? ""
+            let newFilepath = command.params?.arguments?.newFilepath ?? ""
             
-            dto = ToolResult(pets.compactMap { $0.json })
-        case "get_pet_price":
-            dto = ToolResult(["\(Int.random(in: 25...100)) zł"])
+            guard FileManager.default.fileExists(atPath: filepath) else {
+                dto = ToolResult(["File not found at \(filepath)"])
+                break
+            }
+            guard FileManager.default.fileExists(atPath: newFilepath).not else {
+                dto = ToolResult(["File already exists at \(filepath)"])
+                break
+            }
+            try? FileManager.default.moveItem(atPath: filepath, toPath: newFilepath)
+            dto = ToolResult(["File has been moved from \(filepath) to \(newFilepath)"])
+        case "override_file":
+            struct Action: Codable {
+                let filepath: String
+                let content: String
+            }
+            let command: Command<Action> = try body.decode()
+            let filepath = command.params?.arguments?.filepath ?? ""
+            let content = command.params?.arguments?.content ?? ""
+            
+            guard FileManager.default.fileExists(atPath: filepath) else {
+                dto = ToolResult(["File not found at \(filepath)"])
+                break
+            }
+            try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
+            dto = ToolResult(["File has been written to \(filepath)"])
+        case "create_file":
+            struct Action: Codable {
+                let filepath: String
+                let content: String
+            }
+            let command: Command<Action> = try body.decode()
+            let filepath = command.params?.arguments?.filepath ?? ""
+            let content = command.params?.arguments?.content ?? ""
+            
+            guard FileManager.default.fileExists(atPath: filepath).not else {
+                dto = ToolResult(["File already exists at \(filepath)"])
+                break
+            }
+            try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
+            dto = ToolResult(["File has been created at \(filepath)"])
         default:
             logger.e("Unsupported function: \(name)")
             dto = ToolResult([])
