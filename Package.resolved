@@ -1,6 +1,15 @@
 {
-  "originHash" : "ec672cbb0ca7f29ce64d59bdb53972888b1b5a03b12c96478c1809b9d2d47393",
+  "originHash" : "11d9cce2e69d36998cef49fb630bcda255872408020e96b16c223884e333320b",
   "pins" : [
+    {
+      "identity" : "filemonitor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/aus-der-Technik/FileMonitor.git",
+      "state" : {
+        "revision" : "5adbe8f2383eac5148475ef84977806bbd33e8d7",
+        "version" : "1.2.1"
+      }
+    },
     {
       "identity" : "logger",
       "kind" : "remoteSourceControl",
@@ -24,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomieq/SwiftExtensions",
       "state" : {
-        "revision" : "c619b4f1e65c9196f8f3f2d87b2cf38db768e3de",
-        "version" : "1.30.0"
+        "revision" : "25f8cafc1f6f4fa0e162ae383d96f93943b05ad9",
+        "version" : "2.0.0"
       }
     }
   ],

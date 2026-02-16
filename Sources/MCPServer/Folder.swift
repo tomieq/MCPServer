@@ -15,8 +15,12 @@ class Folder {
         self.crawl(url: self.realUrl, prefix: "/")
     }
     
-    func path(_ virtualPath: String) -> String {
+    func realPath(_ virtualPath: String) -> String {
         realUrl.appendingPathComponent(virtualPath).path()
+    }
+    
+    func virtualPath(_ realPath: String) -> String {
+        realPath.replacingOccurrences(of: realUrl.path(), with: virtualUrl.path())
     }
     
     private func crawl(url: URL, prefix: String) -> [String] {

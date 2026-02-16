@@ -10,9 +10,11 @@ import Swifter
 
 class ModelContextProtocol {
     let folder: Folder
+    let cache: FileCache
     
-    init(folder: Folder) {
+    init(folder: Folder, cache: FileCache) {
         self.folder = folder
+        self.cache = cache
     }
     
     func initialize(id: Int) -> MCPResponse<Initialize> {
@@ -83,6 +85,15 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
+            .init(name: "find_text_in_files",
+                  description: "Use this tool if you need to search files in the project looking for a particular text. The result is a list of json (filepath, line, lineContent) containing paths to files that contain specified string toghether with part of the document that was matched ({\"filepath\": \"<PATH>\", \"mathingLine\": \"<LINE HERE>\"})",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "search": .init(type: "string", description: "The text to search for")
+                                  ],
+                                  required: ["search"])
+                 ),
         ])
         return MCPResponse(id: id, dto)
     }
@@ -100,7 +111,7 @@ class ModelContextProtocol {
             }
             let command: Command<File> = try body.decode()
             let virtualPath = command.params?.arguments?.filepath ?? ""
-            let filepath = folder.path(virtualPath)
+            let filepath = folder.realPath(virtualPath)
 
             logger.d("Read file content from: \(virtualPath)")
             let content = try? String(contentsOfFile: filepath, encoding: .utf8)
@@ -114,8 +125,8 @@ class ModelContextProtocol {
             let virtualPath = command.params?.arguments?.oldFilepath ?? ""
             let newVirtualpath = command.params?.arguments?.newFilepath ?? ""
             
-            let filepath = folder.path(virtualPath)
-            let newFilepath = folder.path(newVirtualpath)
+            let filepath = folder.realPath(virtualPath)
+            let newFilepath = folder.realPath(newVirtualpath)
             
             guard FileManager.default.fileExists(atPath: filepath) else {
                 dto = ToolResult(["File not found at \(virtualPath)"])
@@ -136,7 +147,7 @@ class ModelContextProtocol {
             let virtualPath = command.params?.arguments?.filepath ?? ""
             let content = command.params?.arguments?.content ?? ""
             
-            let filepath = folder.path(virtualPath)
+            let filepath = folder.realPath(virtualPath)
             
             guard FileManager.default.fileExists(atPath: filepath) else {
                 dto = ToolResult(["File not found at \(virtualPath)"])
@@ -154,7 +165,7 @@ class ModelContextProtocol {
             let content = command.params?.arguments?.content ?? ""
             
             
-            let filepath = folder.path(virtualPath)
+            let filepath = folder.realPath(virtualPath)
             
             guard FileManager.default.fileExists(atPath: filepath).not else {
                 dto = ToolResult(["File already exists at \(virtualPath)"])
@@ -168,7 +179,7 @@ class ModelContextProtocol {
             }
             let command: Command<Action> = try body.decode()
             let virtualPath = command.params?.arguments?.filepath ?? ""
-            let filepath = folder.path(virtualPath)
+            let filepath = folder.realPath(virtualPath)
             
             guard FileManager.default.fileExists(atPath: filepath) else {
                 dto = ToolResult(["File \(virtualPath) does not exists"])
@@ -176,6 +187,15 @@ class ModelContextProtocol {
             }
             try? FileManager.default.removeItem(atPath: filepath)
             dto = ToolResult(["File \(virtualPath) has been deleted"])
+        case "find_text_in_files":
+            struct Action: Codable {
+                let search: String
+            }
+            let command: Command<Action> = try body.decode()
+            let search = command.params?.arguments?.search ?? ""
+            logger.i("Searching files for text: \(search)")
+
+            dto = ToolResult(cache.matching(search).compactMap { $0.jsonOneLine })
         default:
             logger.e("Unsupported function: \(name)")
             dto = ToolResult([])

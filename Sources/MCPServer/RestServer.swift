@@ -8,8 +8,8 @@ class RestServer {
     private let logger = Logger(RestServer.self)
     private let mcp: ModelContextProtocol
     
-    init(folder: Folder) throws {
-        self.mcp = ModelContextProtocol(folder: folder)
+    init(folder: Folder, cache: FileCache) throws {
+        self.mcp = ModelContextProtocol(folder: folder, cache: cache)
         server.name = "MCP Server"
         server.middleware.append { [unowned self] request, header in
             logger.i("Request \(request.id) \(request.method) \(request.path) from \(request.clientIP ?? "")")
