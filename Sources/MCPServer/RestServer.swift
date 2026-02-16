@@ -6,9 +6,10 @@ import SwiftExtensions
 class RestServer {
     private let server = HttpServer()
     private let logger = Logger(RestServer.self)
-    private let mcp = ModelContextProtocol()
+    private let mcp: ModelContextProtocol
     
-    init() throws {
+    init(folder: Folder) throws {
+        self.mcp = ModelContextProtocol(folder: folder)
         server.name = "MCP Server"
         server.middleware.append { [unowned self] request, header in
             logger.i("Request \(request.id) \(request.method) \(request.path) from \(request.clientIP ?? "")")

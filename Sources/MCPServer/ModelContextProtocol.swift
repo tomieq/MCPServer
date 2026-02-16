@@ -9,6 +9,12 @@ import SwiftExtensions
 import Swifter
 
 class ModelContextProtocol {
+    let folder: Folder
+    
+    init(folder: Folder) {
+        self.folder = folder
+    }
+    
     func initialize(id: Int) -> MCPResponse<Initialize> {
         let dto = Initialize(protocolVersion: "2025-03-26",
                              serverInfo: .init(name: "SwiftMCP",
@@ -23,7 +29,7 @@ class ModelContextProtocol {
         let dto = ToolsList([
             
             .init(name: "list_files",
-                  description: "Returns the tree structure of all files in the project.",
+                  description: "Returns the array with absolute paths of files in the project.",
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [:],
@@ -85,7 +91,7 @@ class ModelContextProtocol {
         let dto: ToolResult
         switch name {
         case "list_files":
-            let folder = Folder("/project/")
+            
             dto = ToolResult(folder.files())
         case "read_file":
             
@@ -93,72 +99,83 @@ class ModelContextProtocol {
                 let filepath: String
             }
             let command: Command<File> = try body.decode()
-            let filepath = command.params?.arguments?.filepath ?? ""
-            logger.d("Read file content from: \(command.params?.arguments?.filepath ?? "")")
+            let virtualPath = command.params?.arguments?.filepath ?? ""
+            let filepath = folder.path(virtualPath)
+
+            logger.d("Read file content from: \(virtualPath)")
             let content = try? String(contentsOfFile: filepath, encoding: .utf8)
-            dto = ToolResult([content.or("File not found at \(filepath)")])
+            dto = ToolResult([content.or("File not found at \(virtualPath)")])
         case "rename_file":
             struct Action: Codable {
                 let oldFilepath: String
                 let newFilepath: String
             }
             let command: Command<Action> = try body.decode()
-            let filepath = command.params?.arguments?.oldFilepath ?? ""
-            let newFilepath = command.params?.arguments?.newFilepath ?? ""
+            let virtualPath = command.params?.arguments?.oldFilepath ?? ""
+            let newVirtualpath = command.params?.arguments?.newFilepath ?? ""
+            
+            let filepath = folder.path(virtualPath)
+            let newFilepath = folder.path(newVirtualpath)
             
             guard FileManager.default.fileExists(atPath: filepath) else {
-                dto = ToolResult(["File not found at \(filepath)"])
+                dto = ToolResult(["File not found at \(virtualPath)"])
                 break
             }
             guard FileManager.default.fileExists(atPath: newFilepath).not else {
-                dto = ToolResult(["File already exists at \(filepath)"])
+                dto = ToolResult(["File already exists at \(virtualPath)"])
                 break
             }
             try? FileManager.default.moveItem(atPath: filepath, toPath: newFilepath)
-            dto = ToolResult(["File has been moved from \(filepath) to \(newFilepath)"])
+            dto = ToolResult(["File has been moved from \(virtualPath) to \(newVirtualpath)"])
         case "override_file":
             struct Action: Codable {
                 let filepath: String
                 let content: String
             }
             let command: Command<Action> = try body.decode()
-            let filepath = command.params?.arguments?.filepath ?? ""
+            let virtualPath = command.params?.arguments?.filepath ?? ""
             let content = command.params?.arguments?.content ?? ""
             
+            let filepath = folder.path(virtualPath)
+            
             guard FileManager.default.fileExists(atPath: filepath) else {
-                dto = ToolResult(["File not found at \(filepath)"])
+                dto = ToolResult(["File not found at \(virtualPath)"])
                 break
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
-            dto = ToolResult(["The content has been written to \(filepath)"])
+            dto = ToolResult(["The content has been written to \(virtualPath)"])
         case "create_file":
             struct Action: Codable {
                 let filepath: String
                 let content: String
             }
             let command: Command<Action> = try body.decode()
-            let filepath = command.params?.arguments?.filepath ?? ""
+            let virtualPath = command.params?.arguments?.filepath ?? ""
             let content = command.params?.arguments?.content ?? ""
             
+            
+            let filepath = folder.path(virtualPath)
+            
             guard FileManager.default.fileExists(atPath: filepath).not else {
-                dto = ToolResult(["File already exists at \(filepath)"])
+                dto = ToolResult(["File already exists at \(virtualPath)"])
                 break
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
-            dto = ToolResult(["File has been created at \(filepath)"])
+            dto = ToolResult(["File has been created at \(virtualPath)"])
         case "delete_file":
             struct Action: Codable {
                 let filepath: String
             }
             let command: Command<Action> = try body.decode()
-            let filepath = command.params?.arguments?.filepath ?? ""
+            let virtualPath = command.params?.arguments?.filepath ?? ""
+            let filepath = folder.path(virtualPath)
             
             guard FileManager.default.fileExists(atPath: filepath) else {
-                dto = ToolResult(["File \(filepath) does not exists"])
+                dto = ToolResult(["File \(virtualPath) does not exists"])
                 break
             }
             try? FileManager.default.removeItem(atPath: filepath)
-            dto = ToolResult(["File \(filepath) has been deleted"])
+            dto = ToolResult(["File \(virtualPath) has been deleted"])
         default:
             logger.e("Unsupported function: \(name)")
             dto = ToolResult([])

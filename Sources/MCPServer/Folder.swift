@@ -7,19 +7,16 @@
 import Foundation
 
 class Folder {
+    let realUrl = URL(fileURLWithPath: "/Users/tomaskuc/dev/LokiAgent/Sources/")
+    private let virtualUrl = URL(fileURLWithPath: "/" )
     private let fileManager = FileManager.default
-    private let url: URL
-    
-    public init(_ url: URL) {
-        self.url = url
-    }
-    
-    public convenience init(_ path: String) {
-        self.init(URL(fileURLWithPath: path))
-    }
     
     func files() -> [String] {
-        self.crawl(url: self.url, prefix: "/project/")
+        self.crawl(url: self.realUrl, prefix: "/")
+    }
+    
+    func path(_ virtualPath: String) -> String {
+        realUrl.appendingPathComponent(virtualPath).path()
     }
     
     private func crawl(url: URL, prefix: String) -> [String] {
