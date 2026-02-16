@@ -34,7 +34,7 @@ class ModelContextProtocol {
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [
-                                    "filepath": .init(type: "text", description: "The absolute path of the file to read")
+                                    "filepath": .init(type: "string", description: "The absolute path of the file to read")
                                   ],
                                   required: ["filepath"])
                  ),
@@ -43,8 +43,8 @@ class ModelContextProtocol {
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [
-                                    "oldFilepath": .init(type: "text", description: "Current absolute path of the file"),
-                                    "newFilepath": .init(type: "text", description: "New absolute path of to be set for the file")
+                                    "oldFilepath": .init(type: "string", description: "Current absolute path of the file"),
+                                    "newFilepath": .init(type: "string", description: "New absolute path of to be set for the file")
                                   ],
                                   required: ["oldFilepath", "newFilepath"])
                  ),
@@ -53,8 +53,8 @@ class ModelContextProtocol {
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [
-                                    "filepath": .init(type: "text", description: "The absolute path of the file to write to"),
-                                    "content": .init(type: "text", description: "The utf8 content to write")
+                                    "filepath": .init(type: "string", description: "The absolute path of the file to write to"),
+                                    "content": .init(type: "string", description: "The utf8 content to write")
                                   ],
                                   required: ["filepath", "content"])
                  ),
@@ -63,8 +63,8 @@ class ModelContextProtocol {
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [
-                                    "filepath": .init(type: "text", description: "The absolute path of the file to create"),
-                                    "content": .init(type: "text", description: "The utf8 content to write")
+                                    "filepath": .init(type: "string", description: "The absolute path of the file to create"),
+                                    "content": .init(type: "string", description: "The utf8 content to write")
                                   ],
                                   required: ["filepath", "content"])
                  ),
@@ -121,7 +121,7 @@ class ModelContextProtocol {
                 break
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
-            dto = ToolResult(["File has been written to \(filepath)"])
+            dto = ToolResult(["The content has been written to \(filepath)"])
         case "create_file":
             struct Action: Codable {
                 let filepath: String
