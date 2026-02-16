@@ -68,6 +68,15 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath", "content"])
                  ),
+            .init(name: "delete_file",
+                  description: "Use this tool if you need to completely delete a file",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "filepath": .init(type: "string", description: "The absolute path of the file to delete")
+                                  ],
+                                  required: ["filepath"])
+                 ),
         ])
         return MCPResponse(id: id, dto)
     }
@@ -137,6 +146,19 @@ class ModelContextProtocol {
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
             dto = ToolResult(["File has been created at \(filepath)"])
+        case "delete_file":
+            struct Action: Codable {
+                let filepath: String
+            }
+            let command: Command<Action> = try body.decode()
+            let filepath = command.params?.arguments?.filepath ?? ""
+            
+            guard FileManager.default.fileExists(atPath: filepath) else {
+                dto = ToolResult(["File \(filepath) does not exists"])
+                break
+            }
+            try? FileManager.default.removeItem(atPath: filepath)
+            dto = ToolResult(["File \(filepath) has been deleted"])
         default:
             logger.e("Unsupported function: \(name)")
             dto = ToolResult([])
