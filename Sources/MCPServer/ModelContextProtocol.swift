@@ -31,11 +31,20 @@ class ModelContextProtocol {
         let dto = ToolsList([
             
             .init(name: "list_files",
-                  description: "Returns the array with absolute paths of files in the project.",
+                  description: "Use this tool if you need to find out what files are in the project. Tool returs a list of absolute paths of all the files.",
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [:],
                                   required: [])
+                 ),
+            .init(name: "find_file",
+                  description: "Use this tool if you need to get absolute path for a file. Provide filename or its part and you will get absolute paths of matching files.",
+                  inputSchema:
+                    ToolParameter(type: "object",
+                                  properties: [
+                                    "filename": .init(type: "string", description: "Filename or its part to search for")
+                                  ],
+                                  required: ["filepath"])
                  ),
             .init(name: "read_file",
                   description: "Use this tool if you need to view the contents of an existing file.",
@@ -104,6 +113,15 @@ class ModelContextProtocol {
         case "list_files":
             
             dto = ToolResult(folder.files())
+        case "find_file":
+            struct File: Codable {
+                let filename: String
+            }
+            let command: Command<File> = try body.decode()
+            let filename = command.params?.arguments?.filename ?? ""
+
+            logger.d("Searching for file: \(filename)")
+            dto = ToolResult(folder.files().filter{ $0.contains(filename) })
         case "read_file":
             
             struct File: Codable {
