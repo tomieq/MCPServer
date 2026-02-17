@@ -7,7 +7,12 @@
 import Foundation
 
 class Folder {
-    let realUrl = URL(fileURLWithPath: "/Users/tomaskuc/dev/LokiAgent/Sources/")
+    let realUrl = URL(fileURLWithPath: "/Users/user/projects/yolo/")
+    let allowedExtensions = ["swift", "java", "kt", "py"]
+    let excludedFolders = [
+        "venv", "runs"
+    ]
+    
     private let virtualUrl = URL(fileURLWithPath: "/" )
     private let fileManager = FileManager.default
     
@@ -30,7 +35,7 @@ class Folder {
             let isDir = (try? fileUrl.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             let filename = fileUrl.pathComponents.last ?? "nil"
             guard filename.starts(with: ".").not else { return }
-            if isDir {
+            if isDir, excludedFolders.contains(filename).not {
                 let newPrefix = prefix + filename + "/"
                 let fileUrl = url.appendingPathComponent(filename)
                 output.append(contentsOf: self.crawl(url: fileUrl, prefix: newPrefix))

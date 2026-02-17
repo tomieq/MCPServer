@@ -18,7 +18,6 @@ class FileCache {
     private let folder: Folder
     private var cache: [String: String] = [:]
     private let logger = Logger(FileCache.self)
-    private let allowedExtensions = ["swift", "java", "kt", "py"]
     
     init(folder: Folder) {
         self.folder = folder
@@ -54,7 +53,7 @@ class FileCache {
     private func load(virtualPath: String) {
         let path = folder.realPath(virtualPath)
         let fileExtension = virtualPath.split("/").last?.split(".").last
-        if let fileExtension, allowedExtensions.contains(fileExtension), let content = try? String(contentsOfFile: path) {
+        if let fileExtension, folder.allowedExtensions.contains(fileExtension), let content = try? String(contentsOfFile: path) {
             self.cache[virtualPath] = content
             logger.d("Loaded content from \(virtualPath)")
         }
