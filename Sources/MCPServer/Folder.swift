@@ -8,9 +8,9 @@ import Foundation
 
 class Folder {
     let realUrl = URL(fileURLWithPath: "/Users/user/projects/yolo/")
-    let allowedExtensions = ["swift", "java", "kt", "py"]
+    let allowedExtensions = ["swift", "java", "kt", "py", "sh", "c", "cpp"]
     let excludedFolders = [
-        "venv", "runs"
+        "venv", "runs", ".git"
     ]
     
     private let virtualUrl = URL(fileURLWithPath: "/" )

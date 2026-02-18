@@ -41,7 +41,7 @@ class FolderMonitor: FileDidChangeDelegate {
     }
     
     public func fileDidChanged(event: FileChange) {
-        logger.i(event.description)
+        logger.i("🗂️ \(event)")
         watcher(event.folderChange)
     }
 }

@@ -111,6 +111,7 @@ class ModelContextProtocol {
         let dto: ToolResult
         switch name {
         case "list_files":
+            logger.d("🗄️ List project's files")
             
             dto = ToolResult(folder.files())
         case "find_file":
@@ -120,7 +121,7 @@ class ModelContextProtocol {
             let command: Command<File> = try body.decode()
             let filename = command.params?.arguments?.filename ?? ""
 
-            logger.d("Searching for file: \(filename)")
+            logger.d("🔎 Find file \(filename)")
             dto = ToolResult(folder.files().filter{ $0.contains(filename) })
         case "read_file":
             
@@ -131,7 +132,7 @@ class ModelContextProtocol {
             let virtualPath = command.params?.arguments?.filepath ?? ""
             let filepath = folder.realPath(virtualPath)
 
-            logger.d("Read file content from: \(virtualPath)")
+            logger.d("👀 Read file content: \(virtualPath)")
             let content = try? String(contentsOfFile: filepath, encoding: .utf8)
             dto = ToolResult([content.or("File not found at \(virtualPath)")])
         case "rename_file":
@@ -155,6 +156,7 @@ class ModelContextProtocol {
                 break
             }
             try? FileManager.default.moveItem(atPath: filepath, toPath: newFilepath)
+            logger.d("💾⚙️ Rename filename from \(virtualPath) ➡️ \(newVirtualpath)")
             dto = ToolResult(["File has been moved from \(virtualPath) to \(newVirtualpath)"])
         case "override_file":
             struct Action: Codable {
@@ -172,6 +174,7 @@ class ModelContextProtocol {
                 break
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
+            logger.d("💾🟠 Override file \(virtualPath)")
             dto = ToolResult(["The content has been written to \(virtualPath)"])
         case "create_file":
             struct Action: Codable {
@@ -190,6 +193,7 @@ class ModelContextProtocol {
                 break
             }
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
+            logger.d("💾🟢 Create file \(virtualPath)")
             dto = ToolResult(["File has been created at \(virtualPath)"])
         case "delete_file":
             struct Action: Codable {
@@ -204,6 +208,7 @@ class ModelContextProtocol {
                 break
             }
             try? FileManager.default.removeItem(atPath: filepath)
+            logger.d("💾🔴 Delete file \(virtualPath)")
             dto = ToolResult(["File \(virtualPath) has been deleted"])
         case "find_text_in_files":
             struct Action: Codable {
@@ -211,7 +216,7 @@ class ModelContextProtocol {
             }
             let command: Command<Action> = try body.decode()
             let search = command.params?.arguments?.search ?? ""
-            logger.i("Searching files for text: \(search)")
+            logger.i("🔎 Searching text: \(search)")
 
             dto = ToolResult(cache.matching(search).compactMap { $0.jsonOneLine })
         default:
