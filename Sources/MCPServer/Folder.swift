@@ -5,13 +5,34 @@
 //  Created by: tomieq on 16/02/2026
 //
 import Foundation
+import Logger
+import SwiftExtensions
+import Env
+
+enum FolderError: Error {
+    case missingProjectPath
+    case missingExtensions
+}
 
 class Folder {
-    let realUrl = URL(fileURLWithPath: "/Users/user/projects/yolo/")
-    let allowedExtensions = ["swift", "java", "kt", "py", "sh", "c", "cpp"]
+    private let logger = Logger(Folder.self)
+    let realUrl: URL
+    let allowedExtensions: [String]
     let excludedFolders = [
         "venv", "runs", ".git"
     ]
+
+    init() throws {
+        guard let projectPath = Env.shared.get("PROJECT_PATH") else {
+            throw FolderError.missingProjectPath
+        }
+        guard let extensions = (Env.shared.get("FILE_EXTENSIONS")?.split(",").map{ $0.trimmed }) else {
+            throw FolderError.missingProjectPath
+        }
+        logger.d("Starting in \(projectPath) with extensions: \(extensions)")
+        self.realUrl = URL(fileURLWithPath: projectPath)
+        self.allowedExtensions = extensions
+    }
     
     private let virtualUrl = URL(fileURLWithPath: "/" )
     private let fileManager = FileManager.default

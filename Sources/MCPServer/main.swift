@@ -8,7 +8,7 @@ import Dispatch
 setvbuf(stdout, nil, _IONBF, 0)
 #endif
 
-let folder = Folder()
+let folder = try Folder()
 let fileCache = FileCache(folder: folder)
 
 let logger = Logger("MCPServer")
