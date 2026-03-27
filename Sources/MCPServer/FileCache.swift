@@ -56,6 +56,8 @@ class FileCache {
         if let fileExtension, folder.allowedExtensions.contains(fileExtension), let content = try? String(contentsOfFile: path) {
             self.cache[virtualPath] = content
             logger.d("🔁 Loaded content from \(virtualPath)")
+        } else {
+            self.cache[virtualPath] = nil
         }
     }
 }
