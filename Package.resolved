@@ -1,5 +1,5 @@
 {
-  "originHash" : "ec672cbb0ca7f29ce64d59bdb53972888b1b5a03b12c96478c1809b9d2d47393",
+  "originHash" : "d85d5d0ebd6365f0b4a837a91786c20a0d6a771cd3b08d56a3ae20bcb322ff8c",
   "pins" : [
     {
       "identity" : "logger",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomieq/SwiftExtensions",
       "state" : {
-        "revision" : "c619b4f1e65c9196f8f3f2d87b2cf38db768e3de",
-        "version" : "1.30.0"
+        "revision" : "25f8cafc1f6f4fa0e162ae383d96f93943b05ad9",
+        "version" : "2.0.0"
       }
     }
   ],
