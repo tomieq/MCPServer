@@ -57,6 +57,7 @@ class FileCache {
             self.cache[virtualPath] = content
             logger.d("🔁 Loaded content from \(virtualPath)")
         } else {
+            logger.d("🔁 Unloaded content from \(virtualPath)")
             self.cache[virtualPath] = nil
         }
     }
