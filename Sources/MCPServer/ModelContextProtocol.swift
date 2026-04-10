@@ -8,6 +8,23 @@ import Foundation
 import SwiftExtensions
 import Swifter
 
+enum Commands: String {
+    case list_files
+    case find_file
+    case read_file
+    case rename_file
+    case override_file
+    case create_file
+    case delete_file
+    case find_text_in_files
+}
+
+extension Commands: CustomStringConvertible {
+    var description: String {
+        rawValue
+    }
+}
+
 class ModelContextProtocol {
     let folder: Folder
     let cache: FileCache
@@ -30,14 +47,14 @@ class ModelContextProtocol {
     func list(id: Int) -> MCPResponse<ToolsList> {
         let dto = ToolsList([
             
-            .init(name: "list_files",
+            .init(name: Commands.list_files,
                   description: "Use this tool if you need to find out what files are in the project. Tool returs a list of absolute paths of all the files.",
                   inputSchema:
                     ToolParameter(type: "object",
                                   properties: [:],
                                   required: [])
                  ),
-            .init(name: "find_file",
+            .init(name: Commands.find_file,
                   description: "Use this tool if you need to get absolute path for a file. Provide filename or its part and you will get absolute paths of matching files.",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -46,7 +63,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: "read_file",
+            .init(name: Commands.read_file,
                   description: "Use this tool if you need to view the contents of an existing file.",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -55,7 +72,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: "rename_file",
+            .init(name: Commands.rename_file,
                   description: "Use this tool if you need to chnage the file's name or move the file within the project",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -65,7 +82,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["oldFilepath", "newFilepath"])
                  ),
-            .init(name: "override_file",
+            .init(name: Commands.override_file,
                   description: "Use this tool if you need to override the content of an existing file.",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -75,7 +92,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath", "content"])
                  ),
-            .init(name: "create_file",
+            .init(name: Commands.create_file,
                   description: "Create a new file. Only use this when a file doesn't exist and should be created",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -85,7 +102,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath", "content"])
                  ),
-            .init(name: "delete_file",
+            .init(name: Commands.delete_file,
                   description: "Use this tool if you need to completely delete a file",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -94,7 +111,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: "find_text_in_files",
+            .init(name: Commands.find_text_in_files,
                   description: "Use this tool if you need to search files in the project looking for a particular text. The result is a list of json (filepath, line, lineContent) containing paths to files that contain specified string toghether with part of the document that was matched ({\"filepath\": \"<PATH>\", \"mathingLine\": \"<LINE HERE>\"})",
                   inputSchema:
                     ToolParameter(type: "object",
@@ -108,13 +125,17 @@ class ModelContextProtocol {
     }
     
     func function(id: Int, name: String, body: HttpRequestBody) throws -> MCPResponse<ToolResult> {
+        guard let command = Commands(rawValue: name) else {
+            logger.e("Unsupported function: \(name)")
+            return MCPResponse(id: id, ToolResult([]))
+        }
         let dto: ToolResult
-        switch name {
-        case "list_files":
+        switch command {
+        case .list_files:
             logger.d("🗄️ List project's files")
             
             dto = ToolResult(folder.files())
-        case "find_file":
+        case .find_file:
             struct File: Codable {
                 let filename: String
             }
@@ -123,7 +144,7 @@ class ModelContextProtocol {
 
             logger.d("🔎 Find file \(filename)")
             dto = ToolResult(folder.files().filter{ $0.contains(filename) })
-        case "read_file":
+        case .read_file:
             
             struct File: Codable {
                 let filepath: String
@@ -135,7 +156,7 @@ class ModelContextProtocol {
             logger.d("👀 Read file content: \(virtualPath)")
             let content = try? String(contentsOfFile: filepath, encoding: .utf8)
             dto = ToolResult([content.or("File not found at \(virtualPath)")])
-        case "rename_file":
+        case .rename_file:
             struct Action: Codable {
                 let oldFilepath: String
                 let newFilepath: String
@@ -158,7 +179,7 @@ class ModelContextProtocol {
             try? FileManager.default.moveItem(atPath: filepath, toPath: newFilepath)
             logger.d("💾⚙️ Rename filename from \(virtualPath) ➡️ \(newVirtualpath)")
             dto = ToolResult(["File has been moved from \(virtualPath) to \(newVirtualpath)"])
-        case "override_file":
+        case .override_file:
             struct Action: Codable {
                 let filepath: String
                 let content: String
@@ -176,7 +197,7 @@ class ModelContextProtocol {
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
             logger.d("💾🟠 Override file \(virtualPath)")
             dto = ToolResult(["The content has been written to \(virtualPath)"])
-        case "create_file":
+        case .create_file:
             struct Action: Codable {
                 let filepath: String
                 let content: String
@@ -195,7 +216,7 @@ class ModelContextProtocol {
             try? content.write(toFile: filepath, atomically: true, encoding: .utf8)
             logger.d("💾🟢 Create file \(virtualPath)")
             dto = ToolResult(["File has been created at \(virtualPath)"])
-        case "delete_file":
+        case .delete_file:
             struct Action: Codable {
                 let filepath: String
             }
@@ -210,7 +231,7 @@ class ModelContextProtocol {
             try? FileManager.default.removeItem(atPath: filepath)
             logger.d("💾🔴 Delete file \(virtualPath)")
             dto = ToolResult(["File \(virtualPath) has been deleted"])
-        case "find_text_in_files":
+        case .find_text_in_files:
             struct Action: Codable {
                 let search: String
             }
@@ -219,9 +240,6 @@ class ModelContextProtocol {
             logger.i("🔎 Searching text: \(search)")
 
             dto = ToolResult(cache.matching(search).compactMap { $0.jsonOneLine })
-        default:
-            logger.e("Unsupported function: \(name)")
-            dto = ToolResult([])
         }
         return MCPResponse(id: id, dto)
     }
