@@ -1,13 +1,13 @@
 {
-  "originHash" : "dfdef8c2a87de91559c9c53fff650bc996adc02f2ca1aa545e00be8a4fa4b675",
+  "originHash" : "728065aed97ebb19983fc7ccc41b5ce2830b55138f76e9abf5505ec2a069d509",
   "pins" : [
     {
       "identity" : "env",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomieq/Env",
       "state" : {
-        "revision" : "3fec7372b664d50b8935435307843ab6dceddd54",
-        "version" : "1.0.4"
+        "revision" : "3976a7ed00a220d4b74f7408c962cb53a61122e2",
+        "version" : "1.0.7"
       }
     },
     {

@@ -9,9 +9,9 @@ import Logger
 import SwiftExtensions
 import Env
 
-enum FolderError: Error {
-    case missingProjectPath
-    case missingExtensions
+struct FolderConfig: Decodable {
+    let projectPath: String
+    let fileExtensions: String
 }
 
 class Folder {
@@ -23,12 +23,9 @@ class Folder {
     ]
 
     init() throws {
-        guard let projectPath = Env.shared.get("PROJECT_PATH") else {
-            throw FolderError.missingProjectPath
-        }
-        guard let extensions = (Env.shared.get("FILE_EXTENSIONS")?.split(",").map{ $0.trimmed }) else {
-            throw FolderError.missingProjectPath
-        }
+        let config: FolderConfig = try Env.shared.decode()
+        let projectPath = config.projectPath
+        let extensions = config.fileExtensions.split(",").map{ $0.trimmed }
         logger.d("Starting in \(projectPath) with extensions: \(extensions)")
         self.realUrl = URL(fileURLWithPath: projectPath)
         self.allowedExtensions = extensions
