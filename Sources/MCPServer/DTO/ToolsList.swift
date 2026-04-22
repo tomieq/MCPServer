@@ -25,6 +25,12 @@ struct ToolsList: Codable {
             self.description = description
             self.inputSchema = inputSchema
         }
+        
+        init(command: CommandName, description: String, inputSchema: ToolParameter) {
+            self.name = command.description
+            self.description = description
+            self.inputSchema = inputSchema
+        }
     }
     
     init(_ tools: [Schema]) {

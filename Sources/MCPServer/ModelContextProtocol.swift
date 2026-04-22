@@ -8,7 +8,7 @@ import Foundation
 import SwiftExtensions
 import Swifter
 
-enum Commands: String {
+enum CommandName: String {
     case list_files
     case find_file
     case read_file
@@ -19,7 +19,7 @@ enum Commands: String {
     case find_text_in_files
 }
 
-extension Commands: CustomStringConvertible {
+extension CommandName: CustomStringConvertible {
     var description: String {
         rawValue
     }
@@ -47,14 +47,14 @@ class ModelContextProtocol {
     func list(id: Int) -> MCPResponse<ToolsList> {
         let dto = ToolsList([
             
-            .init(name: Commands.list_files,
+            .init(command: .list_files,
                   description: "Use this tool if you need to find out what files are in the project. Tool returs a list of absolute paths of all the files.",
                   inputSchema:
                     ToolParameter(type: .object,
                                   properties: [:],
                                   required: [])
                  ),
-            .init(name: Commands.find_file,
+            .init(command: .find_file,
                   description: "Use this tool if you need to get absolute path for a file. Provide filename or its part and you will get absolute paths of matching files.",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -63,7 +63,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: Commands.read_file,
+            .init(command: .read_file,
                   description: "Use this tool if you need to view the contents of an existing file.",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -72,7 +72,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: Commands.rename_file,
+            .init(command: .rename_file,
                   description: "Use this tool if you need to chnage the file's name or move the file within the project",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -82,7 +82,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["oldFilepath", "newFilepath"])
                  ),
-            .init(name: Commands.override_file,
+            .init(command: .override_file,
                   description: "Use this tool if you need to override the content of an existing file.",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -92,7 +92,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath", "content"])
                  ),
-            .init(name: Commands.create_file,
+            .init(command: .create_file,
                   description: "Create a new file. Only use this when a file doesn't exist and should be created",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -102,7 +102,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath", "content"])
                  ),
-            .init(name: Commands.delete_file,
+            .init(command: .delete_file,
                   description: "Use this tool if you need to completely delete a file",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -111,7 +111,7 @@ class ModelContextProtocol {
                                   ],
                                   required: ["filepath"])
                  ),
-            .init(name: Commands.find_text_in_files,
+            .init(command: .find_text_in_files,
                   description: "Use this tool if you need to search files in the project looking for a particular text. The result is a list of json (filepath, line, lineContent) containing paths to files that contain specified string toghether with part of the document that was matched ({\"filepath\": \"<PATH>\", \"mathingLine\": \"<LINE HERE>\"})",
                   inputSchema:
                     ToolParameter(type: .object,
@@ -125,7 +125,7 @@ class ModelContextProtocol {
     }
     
     func function(id: Int, name: String, body: HttpRequestBody) throws -> MCPResponse<ToolResult> {
-        guard let command = Commands(rawValue: name) else {
+        guard let command = CommandName(rawValue: name) else {
             logger.e("Unsupported function: \(name)")
             return MCPResponse(id: id, ToolResult([]))
         }
