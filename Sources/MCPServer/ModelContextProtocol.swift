@@ -7,10 +7,10 @@
 import Foundation
 import SwiftExtensions
 import Swifter
-
-
+import Logger
 
 class ModelContextProtocol {
+    private let logger = Logger(ModelContextProtocol.self)
     let engine: Engine
     
     init(folder: Folder, cache: FileCache) {
