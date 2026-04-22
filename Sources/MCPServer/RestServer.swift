@@ -53,5 +53,9 @@ class RestServer {
         }
         try server.start(8080, forceIPv4: true)
         logger.i("Server started on port \(try server.port)")
+        Process.watchSignals { [unowned self] _ in
+            server.stop()
+            exit(EXIT_SUCCESS)
+        }
     }
 }
