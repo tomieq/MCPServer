@@ -31,18 +31,20 @@ class RestServer {
             switch command.method {
             case "initialize":
                 let response = mcp.initialize(id: command.id.or(0))
+                logger.d("response: \(response.json ?? "nil")")
                 return .ok(.json(response))
             case "notifications/initialized":
                 return .ok(.text(""))
             case "tools/list":
                 let response = mcp.list(id: command.id.or(0))
+                logger.d("response: \(response.json ?? "nil")")
                 return .ok(.json(response))
             case "tools/call":
                 let response = try mcp.call(id: command.id.or(0),
                                             name: command.params?.name ?? "",
                                             body: request.body,
                 )
-                logger.d(response.json!)
+                logger.d(response.json ?? "nil")
                 return .ok(.json(response))
             default:
                 break
