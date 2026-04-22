@@ -7,9 +7,10 @@
 import Foundation
 import SwiftExtensions
 import Swifter
+import Logger
 
 class ModelContextProtocol {
-    
+    private let logger = Logger(ModelContextProtocol.self)
     let engine: Engine = PetEngine()
     
     func initialize(id: Int) -> MCPResponse<Initialize> {

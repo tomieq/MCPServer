@@ -5,6 +5,7 @@
 //  Created by: tomieq on 22/04/2026
 //
 import Swifter
+import Logger
 
 enum CommandName: String, Codable {
     case get_pets
@@ -17,8 +18,9 @@ extension CommandName: CustomStringConvertible {
     }
 }
 
+
 class PetEngine: Engine {
-    
+    private let logger = Logger(PetEngine.self)
     let instructions = "Provides available pets"
     
     let tools = ToolsList([
