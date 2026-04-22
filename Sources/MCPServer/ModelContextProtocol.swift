@@ -34,15 +34,15 @@ class ModelContextProtocol {
             .init(name: Commands.get_pets,
                   description: "Returns an array of objects with all possible pets (petID, kind, name)",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [:],
                                   required: [])
                  ),
             .init(name: Commands.get_pet_price,
                   description: "Returns the price of given pet. Call it for one of the pets from get_pets. If you want prices for many pets, you need to call this multiple times.",
                   inputSchema:
-                    ToolParameter(type: "object",
-                                  properties: ["petID": .init(type: "string", description: "petID of returned from get_pets")],
+                    ToolParameter(type: .object,
+                                  properties: ["petID": .init(type: .string, description: "petID of returned from get_pets")],
                                   required: ["petID"])
                  )
            ])
