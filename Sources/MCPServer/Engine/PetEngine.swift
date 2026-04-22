@@ -22,14 +22,14 @@ class PetEngine: Engine {
     let instructions = "Provides available pets"
     
     let tools = ToolsList([
-        .init(name: CommandName.get_pets,
+        .init(command: .get_pets,
               description: "Returns an array of objects with all possible pets (petID, kind, name)",
               inputSchema:
                 ToolParameter(type: .object,
                               properties: [:],
                               required: [])
              ),
-        .init(name: CommandName.get_pet_price,
+        .init(command: .get_pet_price,
               description: "Returns the price of given pet. Call it for one of the pets from get_pets. If you want prices for many pets, you need to call this multiple times.",
               inputSchema:
                 ToolParameter(type: .object,
