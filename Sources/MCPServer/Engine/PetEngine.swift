@@ -6,6 +6,17 @@
 //
 import Swifter
 
+enum CommandName: String, Codable {
+    case get_pets
+    case get_pet_price
+}
+
+extension CommandName: CustomStringConvertible {
+    var description: String {
+        rawValue
+    }
+}
+
 class PetEngine: Engine {
     
     let instructions = "Provides available pets"

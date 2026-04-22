@@ -8,17 +8,6 @@ import Foundation
 import SwiftExtensions
 import Swifter
 
-enum CommandName: String, Codable {
-    case get_pets
-    case get_pet_price
-}
-
-extension CommandName: CustomStringConvertible {
-    var description: String {
-        rawValue
-    }
-}
-
 class ModelContextProtocol {
     
     let engine: Engine = PetEngine()
