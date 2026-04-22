@@ -6,13 +6,14 @@
 //
 import Foundation
 import SwiftExtensions
+import Swifter
 
-enum Commands: String {
+enum CommandName: String, Codable {
     case get_pets
     case get_pet_price
 }
 
-extension Commands: CustomStringConvertible {
+extension CommandName: CustomStringConvertible {
     var description: String {
         rawValue
     }
@@ -31,26 +32,26 @@ class ModelContextProtocol {
     
     func list(id: Int) -> MCPResponse<ToolsList> {
         let dto = ToolsList([
-            .init(name: Commands.get_pets,
+            .init(name: CommandName.get_pets,
                   description: "Returns an array of objects with all possible pets (petID, kind, name)",
                   inputSchema:
                     ToolParameter(type: .object,
                                   properties: [:],
                                   required: [])
                  ),
-            .init(name: Commands.get_pet_price,
+            .init(name: CommandName.get_pet_price,
                   description: "Returns the price of given pet. Call it for one of the pets from get_pets. If you want prices for many pets, you need to call this multiple times.",
                   inputSchema:
                     ToolParameter(type: .object,
-                                  properties: ["petID": .init(type: .string, description: "petID of returned from get_pets")],
+                                  properties: ["petID": .init(type: .integer, description: "petID of returned from get_pets")],
                                   required: ["petID"])
                  )
            ])
         return MCPResponse(id: id, dto)
     }
     
-    func function(id: Int, name: String) -> MCPResponse<ToolResult> {
-        guard let command = Commands(rawValue: name) else {
+    func function(id: Int, name: String, body: HttpRequestBody) throws -> MCPResponse<ToolResult> {
+        guard let command = CommandName(rawValue: name) else {
             logger.e("Unsupported function: \(name)")
             return MCPResponse(id: id, ToolResult([]))
         }
@@ -71,6 +72,16 @@ class ModelContextProtocol {
             
             dto = ToolResult(pets.compactMap { $0.json })
         case .get_pet_price:
+            struct Pet: Codable {
+                let petID: Int
+            }
+            let command: Command<Pet> = try body.decode()
+            guard let petID = command.params?.arguments?.petID else {
+                logger.e("Missing petID")
+                dto = ToolResult([])
+                break
+            }
+            logger.i("Returning price for petID: \(petID)")
             dto = ToolResult(["\(Int.random(in: 25...100)) zł"])
         }
         return MCPResponse(id: id, dto)
