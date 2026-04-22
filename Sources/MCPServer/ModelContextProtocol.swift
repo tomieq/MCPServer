@@ -28,7 +28,7 @@ class ModelContextProtocol {
                              serverInfo: .init(name: "SwiftMCP",
                                                version: "1.0.0"),
                              capabilities: .init(tools: .init(listChanged: false)),
-                             instructions: "Provides available pets"
+                             instructions: engine.instructions
         )
         return MCPResponse(id: id, dto)
     }

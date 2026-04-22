@@ -7,6 +7,9 @@
 import Swifter
 
 class PetEngine: Engine {
+    
+    let instructions = "Provides available pets"
+    
     let tools = ToolsList([
         .init(name: CommandName.get_pets,
               description: "Returns an array of objects with all possible pets (petID, kind, name)",
