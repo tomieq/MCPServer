@@ -24,7 +24,7 @@ class RestServer {
                 ))
         }
         server.post["/mcp"] = { [unowned self] request, _ in
-            logger.d("body: \(request.body.string!)")
+            logger.d("body: \n\(request.body.string?.prettyJSON ?? "nil")")
             let command: Command<NoArguments> = try request.body.decode()
             logger.i("command: \(command.method) \(command.params?.name ?? "")")
             
