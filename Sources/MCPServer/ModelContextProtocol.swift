@@ -50,73 +50,73 @@ class ModelContextProtocol {
             .init(name: Commands.list_files,
                   description: "Use this tool if you need to find out what files are in the project. Tool returs a list of absolute paths of all the files.",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [:],
                                   required: [])
                  ),
             .init(name: Commands.find_file,
                   description: "Use this tool if you need to get absolute path for a file. Provide filename or its part and you will get absolute paths of matching files.",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "filename": .init(type: "string", description: "Filename or its part to search for")
+                                    "filename": .init(type: .string, description: "Filename or its part to search for")
                                   ],
                                   required: ["filepath"])
                  ),
             .init(name: Commands.read_file,
                   description: "Use this tool if you need to view the contents of an existing file.",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "filepath": .init(type: "string", description: "The absolute path of the file to read")
+                                    "filepath": .init(type: .string, description: "The absolute path of the file to read")
                                   ],
                                   required: ["filepath"])
                  ),
             .init(name: Commands.rename_file,
                   description: "Use this tool if you need to chnage the file's name or move the file within the project",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "oldFilepath": .init(type: "string", description: "Current absolute path of the file"),
-                                    "newFilepath": .init(type: "string", description: "New absolute path of to be set for the file")
+                                    "oldFilepath": .init(type: .string, description: "Current absolute path of the file"),
+                                    "newFilepath": .init(type: .string, description: "New absolute path of to be set for the file")
                                   ],
                                   required: ["oldFilepath", "newFilepath"])
                  ),
             .init(name: Commands.override_file,
                   description: "Use this tool if you need to override the content of an existing file.",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "filepath": .init(type: "string", description: "The absolute path of the file to write to"),
-                                    "content": .init(type: "string", description: "The utf8 content to write")
+                                    "filepath": .init(type: .string, description: "The absolute path of the file to write to"),
+                                    "content": .init(type: .string, description: "The utf8 content to write")
                                   ],
                                   required: ["filepath", "content"])
                  ),
             .init(name: Commands.create_file,
                   description: "Create a new file. Only use this when a file doesn't exist and should be created",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "filepath": .init(type: "string", description: "The absolute path of the file to create"),
-                                    "content": .init(type: "string", description: "The utf8 content to write")
+                                    "filepath": .init(type: .string, description: "The absolute path of the file to create"),
+                                    "content": .init(type: .string, description: "The utf8 content to write")
                                   ],
                                   required: ["filepath", "content"])
                  ),
             .init(name: Commands.delete_file,
                   description: "Use this tool if you need to completely delete a file",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "filepath": .init(type: "string", description: "The absolute path of the file to delete")
+                                    "filepath": .init(type: .string, description: "The absolute path of the file to delete")
                                   ],
                                   required: ["filepath"])
                  ),
             .init(name: Commands.find_text_in_files,
                   description: "Use this tool if you need to search files in the project looking for a particular text. The result is a list of json (filepath, line, lineContent) containing paths to files that contain specified string toghether with part of the document that was matched ({\"filepath\": \"<PATH>\", \"mathingLine\": \"<LINE HERE>\"})",
                   inputSchema:
-                    ToolParameter(type: "object",
+                    ToolParameter(type: .object,
                                   properties: [
-                                    "search": .init(type: "string", description: "The text to search for")
+                                    "search": .init(type: .string, description: "The text to search for")
                                   ],
                                   required: ["search"])
                  ),

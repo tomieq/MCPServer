@@ -8,14 +8,30 @@ struct Tool: Codable {
 
 
 struct ToolParameter: Codable {
-    let type: String
-    let properties: [String: Property]
-    let required: [String]
+    let type: ValueType // usually .object and empty properties
+    let properties: [String: Property] // pair name and type
+    let required: [String] // required property names
 
     struct Property: Codable {
-        let type: String
+        let type: ValueType
         let description: String
+    }
+    
+    init(type: ValueType = .object, properties: [String : Property], required: [String]) {
+        self.type = type
+        self.properties = properties
+        self.required = required
     }
 }
 
-
+enum ValueType: String, Codable {
+    case string
+    case integer
+    case number // default for Double
+    case boolean
+    case array
+    case object
+    case date
+    case uuid
+    case any
+}
