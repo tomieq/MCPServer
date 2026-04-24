@@ -431,42 +431,58 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
         if !current.isEmpty { parts.append(current) }
         return parts
     }
-    
-private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
-    let trimmed = paramsString.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty { return [] }
 
-    let rawParts = splitTopLevel(trimmed, separator: ",")
-    return rawParts.compactMap { rawPart in
-        let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !part.isEmpty else { return nil }
-        // split on first ':' (type separator)
-        guard let colonIdx = part.firstIndex(of: ":") else { return nil }
-        let namePart = part[..<colonIdx].trimmingCharacters(in: .whitespacesAndNewlines)
-        var typePart = part[part.index(after: colonIdx)...].trimmingCharacters(in: .whitespacesAndNewlines)
-        // remove default value if present: split on '=', but only top-level
-        if let eqIdx = splitTopLevel(String(typePart), separator: "=").first?.startIndex {
-            // keep left of '=' already handled by splitTopLevel: simpler to split by '=' top-level
-            let left = splitTopLevel(String(typePart), separator: "=")[0]
-            typePart = left.trimmingCharacters(in: .whitespacesAndNewlines)
-        } else {
-            // no default
-            // nothing
+    private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
+        let trimmed = paramsString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return [] }
+
+        let rawParts = splitTopLevel(trimmed, separator: ",")
+        var result: [FunctionParameter] = []
+
+        for rawPart in rawParts {
+            let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !part.isEmpty else { continue }
+
+            // Split on top-level ':' to determine if there is a name/label part.
+            let colonSplit = splitTopLevel(part, separator: ":")
+
+            if colonSplit.count == 1 {
+                // No top-level colon -> this is a type-only parameter (e.g. enum case: b(Int))
+                let typeOnly = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Use '_' as a placeholder name, label nil (tests don't assert the name for such cases)
+                result.append(FunctionParameter(name: "_", label: nil, type: typeOnly))
+                continue
+            }
+
+            // There is a top-level colon: first piece is the name part, rest combined is the type (may contain additional ':' inside generics etc)
+            let namePart = colonSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let typePartJoined = colonSplit.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Remove default value if present by splitting on top-level '='
+            let eqSplit = splitTopLevel(typePartJoined, separator: "=")
+            let typePart = eqSplit.first!.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Parse name/label tokens (externalLabel internalName) or just internalName
+            let nameTokens = namePart
+                .split(separator: " ", omittingEmptySubsequences: true)
+                .map { String($0) }
+
+            var label: String? = nil
+            var name: String
+
+            if nameTokens.count == 1 {
+                name = nameTokens[0]
+                // single token -> no explicit external label provided; keep label nil
+                if name == "_" { /* internal name is '_' -> keep label nil and name as '_' */ }
+            } else {
+                label = nameTokens.first
+                name = nameTokens.last ?? nameTokens.joined()
+                if label == "_" { label = nil }
+            }
+
+            result.append(FunctionParameter(name: name, label: label, type: typePart))
         }
-        // parse name / label
-        let nameTokens = namePart.split(separator: " ", omittingEmptySubsequences: true).map { String($0) }
-        var label: String? = nil
-        var name: String
-        if nameTokens.count == 1 {
-            name = nameTokens[0]
-            if name == "_" { name = "_" } // local name '_' is allowed; you may decide to treat label as nil
-            if name == "_" { label = nil } // external name is _
-        } else {
-            label = nameTokens.first
-            name = nameTokens.last ?? nameTokens.joined()
-            if label == "_" { label = nil }
-        }
-        return FunctionParameter(name: name, label: label, type: typePart)
+
+        return result
     }
-}
 }
