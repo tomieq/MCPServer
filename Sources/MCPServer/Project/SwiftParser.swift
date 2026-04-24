@@ -36,12 +36,19 @@ struct ObjectMethod: Equatable, Hashable, Codable {
     let canThrow: Bool
 }
 
+struct EnumCase: Equatable, Hashable, Codable {
+    let caseName: String
+    let rawValue: String?
+    let parameters: [FunctionParameter]?
+}
+
 struct ObjectDefinition: Equatable, Hashable, Codable {
     let objectType: ObjectType
     let objectName: String
     let modifiers: [ObjectTypeModifier]?
     let inheritsFrom: String?
     let functions: [ObjectMethod]?
+    let cases: [EnumCase]?
 }
 
 // MARK: - Parser
@@ -74,13 +81,17 @@ struct SwiftParser {
                 let searchStart = fullMatchRange.location + fullMatchRange.length
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
+                    
                     let functions = harvestMethods(from: bodyContent)
+                    let cases = objectType == .enum ? harvestEnumCases(from: bodyContent) : nil
+                    
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
                         objectName: name,
                         modifiers: usedModifiers.isEmpty ? nil : usedModifiers.unique,
                         inheritsFrom: inheritsFrom,
-                        functions: functions.isEmpty ? nil : functions
+                        functions: functions.isEmpty ? nil : functions,
+                        cases: cases?.isEmpty == false ? cases : nil
                     ))
                 }
             }
@@ -107,10 +118,6 @@ struct SwiftParser {
 
     private static func harvestMethods(from body: String) -> [ObjectMethod] {
         var methods: [ObjectMethod] = []
-        
-        // MODIFIED REGEX:
-        // Group 5 ([^{ \n\r]*[^{\n\r]*) now stops at the first newline or open brace
-        // to prevent consuming subsequent property declarations in protocols.
         let methodPattern = "([^\\{]*?)\\bfunc\\s+([^\\(]*?)([a-z][a-zA-Z0-9_]+(?:<[^>]*>)?)\\s*\\(([^)]*)\\)([^{\\n\\r]*)"
         
         guard let regex = try? NSRegularExpression(pattern: methodPattern) else { return [] }
@@ -125,12 +132,9 @@ struct SwiftParser {
                 .filter { !$0.isEmpty }
             
             let modifiers = allModStrings.compactMap { MethodModifier(rawValue: $0) }
-            
             let name = (body as NSString).substring(with: result.range(at: 3))
             let paramsString = (body as NSString).substring(with: result.range(at: 4))
             let parameters = parseParameters(paramsString)
-            
-            // This now contains only the line containing the signature
             let signatureSuffix = (body as NSString).substring(with: result.range(at: 5))
             
             let canThrow = signatureSuffix.contains("throws")
@@ -139,7 +143,7 @@ struct SwiftParser {
                 let afterArrow = signatureSuffix[arrowRange.upperBound...]
                 let cleanReturn = afterArrow.trimmingCharacters(in: .whitespacesAndNewlines)
                     .components(separatedBy: "{")[0]
-                    .components(separatedBy: ";")[0] // Also split by semicolon for safety
+                    .components(separatedBy: ";")[0]
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 returnType = cleanReturn.isEmpty ? "Void" : String(cleanReturn)
             }
@@ -153,6 +157,38 @@ struct SwiftParser {
             ))
         }
         return methods
+    }
+
+    private static func harvestEnumCases(from body: String) -> [EnumCase] {
+        var cases: [EnumCase] = []
+        // Pattern matches: case name (params) = value OR case name = value OR case name (params)
+        let casePattern = "\\bcase\\s+([a-z][a-zA-Z0-9_]+)\\s*(\\(([^)]*)\\))?\\s*(=\\s*([^\\n\\r,]*))?"
+        
+        guard let regex = try? NSRegularExpression(pattern: casePattern) else { return [] }
+        let range = NSRange(location: 0, length: body.utf16.count)
+        
+        for result in regex.matches(in: body, options: [], range: range) {
+            let name = (body as NSString).substring(with: result.range(at: 1))
+            
+            var parameters: [FunctionParameter]? = nil
+            if result.range(at: 3).location != NSNotFound {
+                let paramsString = (body as NSString).substring(with: result.range(at: 3))
+                let parsedParams = parseParameters(paramsString)
+                parameters = parsedParams.isEmpty ? nil : parsedParams
+            }
+            
+            var rawValue: String? = nil
+            if result.range(at: 5).location != NSNotFound {
+                rawValue = (body as NSString).substring(with: result.range(at: 5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            
+            cases.append(EnumCase(
+                caseName: name,
+                rawValue: rawValue,
+                parameters: parameters
+            ))
+        }
+        return cases
     }
 
     private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
