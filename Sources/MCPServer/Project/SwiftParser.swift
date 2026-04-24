@@ -51,12 +51,25 @@ struct ObjectDefinition: Equatable, Hashable, Codable {
     let cases: [EnumCase]?
 }
 
+struct SwiftFile: Equatable, Hashable, Codable {
+    let objects: [ObjectDefinition]
+    let imports: [String]?
+}
+
 // MARK: - Parser
 struct SwiftParser {
-    static func getObjectTypes(fileContent txt: String) -> [ObjectDefinition] {
-        let txt  = CommentRemover.removeComments(txt)
+    
+    static func parseFile(fileContent txt: String) -> SwiftFile {
+        let imports = harvestImports(from: txt)
+        return SwiftFile(objects: Self.parseObjecsTypes(fileContent: txt),
+                         imports: imports.isEmpty ? nil : imports)
+    }
+    
+    static func parseObjecsTypes(fileContent txt: String) -> [ObjectDefinition] {
+        let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
+        
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
         
         for objectType in ObjectType.allCases {
@@ -97,6 +110,29 @@ struct SwiftParser {
             }
         }
         return definitions
+    }
+
+    private static func harvestImports(from txt: String) -> [String] {
+        var imports: [String] = []
+        // Changed ([a-zA-Z0-9_.,\s]+) to ([a-zA-Z0-9_., ]+)
+        // to prevent matching newline characters (\n \r)
+        let importPattern = "^import\\s+([a-zA-Z0-9_., ]+)"
+        
+        guard let regex = try? NSRegularExpression(pattern: importPattern, options: [.anchorsMatchLines]) else { return [] }
+        let range = NSRange(location: 0, length: txt.utf16.count)
+        
+        for result in regex.matches(in: txt, options: [], range: range) {
+            if result.range(at: 1).location != NSNotFound {
+                let importsLine = (txt as NSString).substring(with: result.range(at: 1))
+                // Rozdzielanie importów oddzielonych przecinkami
+                let modules = importsLine.components(separatedBy: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .map { $0.components(separatedBy: " as ")[0].trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                imports.append(contentsOf: modules)
+            }
+        }
+        return imports.unique
     }
 
     private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
@@ -161,7 +197,6 @@ struct SwiftParser {
 
     private static func harvestEnumCases(from body: String) -> [EnumCase] {
         var cases: [EnumCase] = []
-        // Pattern matches: case name (params) = value OR case name = value OR case name (params)
         let casePattern = "\\bcase\\s+([a-z][a-zA-Z0-9_]+)\\s*(\\(([^)]*)\\))?\\s*(=\\s*([^\\n\\r,]*))?"
         
         guard let regex = try? NSRegularExpression(pattern: casePattern) else { return [] }

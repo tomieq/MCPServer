@@ -7,7 +7,7 @@
 import Foundation
 
 indirect enum FileItem: Codable {
-    case filename(name: String, objects: [ObjectDefinition])
+    case file(filename: String, structure: SwiftFile)
     case folder(name: String, files: [FileItem])
 }
 
@@ -15,8 +15,8 @@ extension FileItem {
     static func harvest(url: URL, extensions: [String]) throws -> FileItem? {
         guard url.isDirectory else {
             if extensions.contains(url.pathExtension) {
-                return .filename(name: url.lastPathComponent,
-                                 objects: SwiftParser.getObjectTypes(fileContent: try String(contentsOf: url))
+                return .file(filename: url.lastPathComponent,
+                             structure: SwiftParser.parseFile(fileContent: try String(contentsOf: url))
                 )
             } else {
                 return nil
@@ -29,9 +29,9 @@ extension FileItem {
                     files.append(filesInFolder)
                 }
             } else if extensions.contains(subUrl.pathExtension) {
-                files.append(.filename(name: subUrl.lastPathComponent,
-                                       objects: SwiftParser.getObjectTypes(fileContent: try String(contentsOf: url))
-                                      ))
+                files.append(.file(filename: subUrl.lastPathComponent,
+                                   structure: SwiftParser.parseFile(fileContent: try String(contentsOf: url))
+                                  ))
             }
         }
         if files.isEmpty { return nil }
