@@ -48,6 +48,7 @@ struct ObjectDefinition: Equatable, Hashable, Codable {
     let name: String
     let modifiers: [ObjectTypeModifier]?
     let inheritsFrom: String?
+    let whereClause: String?
     let functions: [ObjectMethod]?
     let cases: [EnumCase]?
 }
@@ -75,7 +76,6 @@ struct SwiftParser {
                          imports: imports.isEmpty ? nil : imports)
     }
     
-    // Replace the parseObjecsTypes(...) method with this updated implementation
     static func parseObjecsTypes(fileContent txt: String, config: ParserConfig) -> [ObjectDefinition] {
         let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
@@ -97,15 +97,14 @@ struct SwiftParser {
                 guard result.range(at: 1).location != NSNotFound else { continue }
                 var rawName = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // If name contains a 'where' clause, strip it off (we don't store where-clause in ObjectDefinition)
-                if let whereRange = rawName.range(of: " where ") {
-                    rawName = String(rawName[..<whereRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                // If name contains a 'where' clause inline (unlikely), strip it off from name
+                if let whereRangeInName = rawName.range(of: "\\bwhere\\b", options: .regularExpression) {
+                    rawName = String(rawName[..<whereRangeInName.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
                 }
 
                 // Remove surrounding backticks if present
                 rawName = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "`")).trimmingCharacters(in: .whitespacesAndNewlines)
                 if rawName.isEmpty { continue }
-
                 let name = rawName
 
                 var inheritsFrom: String? = nil
@@ -126,6 +125,33 @@ struct SwiftParser {
                 // Find body starting location (after the full match) and attempt to find matching brace block
                 let searchStart = fullMatchRange.location + fullMatchRange.length
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
+                    // bodyRange.location is the first character INSIDE the braces (openBraceLocation + 1)
+                    // therefore the open brace position is bodyRange.location - 1 (if > 0)
+                    let openBraceLocation = max(0, bodyRange.location - 1)
+                    // header is portion between end of regex match and the opening brace
+                    let headerStart = fullMatchRange.location + fullMatchRange.length
+                    let headerLength = max(0, openBraceLocation - headerStart)
+                    var whereClause: String? = nil
+                    if headerLength > 0 {
+                        let headerRange = NSRange(location: headerStart, length: headerLength)
+                        let header = (txt as NSString).substring(with: headerRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Look for where clause in header (top-level), e.g. "where T: Equatable"
+                        if let whereRegex = try? NSRegularExpression(pattern: "\\bwhere\\b", options: [.caseInsensitive]) {
+                            let headerNS = header as NSString
+                            let hRange = NSRange(location: 0, length: headerNS.length)
+                            if let whereMatch = whereRegex.firstMatch(in: header, options: [], range: hRange) {
+                                // take everything from 'where' to the end of header
+                                let whereStart = whereMatch.range.location
+                                if whereStart < headerNS.length {
+                                    let wherePart = headerNS.substring(from: whereStart).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if !wherePart.isEmpty {
+                                        whereClause = wherePart
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
 
                     let functions: [ObjectMethod]
@@ -147,6 +173,7 @@ struct SwiftParser {
                         name: name,
                         modifiers: usedModifiers.isEmpty ? nil : usedModifiers.unique,
                         inheritsFrom: inheritsFrom,
+                        whereClause: whereClause,
                         functions: functions.isEmpty ? nil : functions,
                         cases: cases?.isEmpty == false ? cases : nil
                     ))
