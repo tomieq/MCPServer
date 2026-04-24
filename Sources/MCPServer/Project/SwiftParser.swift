@@ -484,7 +484,6 @@ struct SwiftParser {
             } else {
                 label = nameTokens.first
                 name = nameTokens.last ?? nameTokens.joined()
-                if label == "_" { label = nil }
             }
             
             result.append(FunctionParameter(name: name, label: label, type: typePart))

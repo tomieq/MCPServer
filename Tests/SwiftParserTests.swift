@@ -117,81 +117,145 @@ final class SwiftParserTests: XCTestCase {
     func test_enum_cases_multiple_and_associated_and_raw() throws {
         let src = """
         enum E {
-            case a, b(Int), c = 3, d(name: String), e(_ value: (Int, String))
+            case a, b(Int), c, d(name: String), e(_ value: (Int, String))
         }
         """
         let file = SwiftParser.parseFile(fileContent: src)
         let obj = findObject(in: file, type: .enum, name: "E")
         XCTAssertNotNil(obj)
-        // Check cases existence and details
-        let caseA = findEnumCase(obj!, caseName: "a")
-        XCTAssertNotNil(caseA)
-        XCTAssertNil(caseA?.params)
-        let caseB = findEnumCase(obj!, caseName: "b")
-        XCTAssertNotNil(caseB)
-        XCTAssertEqual(caseB?.params?.count, 1)
-        XCTAssertEqual(caseB?.params?.first?.type, "Int")
-        let caseC = findEnumCase(obj!, caseName: "c")
-        XCTAssertEqual(caseC?.rawValue, "3")
-        let caseD = findEnumCase(obj!, caseName: "d")
-        XCTAssertEqual(caseD?.params?.first?.name, "name")
-        // underscore local label behavior (external label _ should become nil)
-        let caseE = findEnumCase(obj!, caseName: "e")
-        XCTAssertNotNil(caseE)
-        XCTAssertEqual(caseE?.params?.first?.name, "value")
+        XCTAssertEqual(obj?.cases, [
+            EnumCase(name: "a", rawValue: nil, params: nil),
+            EnumCase(name: "b", rawValue: nil, params: [
+                .init(name: nil, type: "Int")
+            ]),
+            EnumCase(name: "c", rawValue: nil, params: nil),
+            EnumCase(name: "d", rawValue: nil, params: [
+                .init(name: "name", type: "String")
+            ]),
+            EnumCase(name: "e", rawValue: nil, params: [
+                .init(name: "value", type: "(Int, String)")
+            ])
+        ])
     }
     
-    func test_function_signatures_various() throws {
+    
+    func test_functionNoArguments() throws {
         let src = """
         struct S {
             public func foo() {}
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "foo", modifiers: [.public], params: nil, returnType: "Void", canThrow: false)
+        ])
+    }
+    
+    func test_functionWithArguments() throws {
+        let src = """
+        struct S {
             func add(a: Int, b label: String = "x") -> String { return \"\" }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "add", modifiers: nil, params: [
+                FunctionParameter(name: "a", label: nil, type: "Int"),
+                FunctionParameter(name: "label", label: "b", type: "String")
+            ], returnType: "String", canThrow: false)
+        ])
+    }
+    
+    func test_throwingStaticFunction() throws {
+        let src = """
+        struct S {
             @objc static func objcMethod(name: String?) throws -> [String: Any] {}
-            func complex(param: (Int, String), closure: (Int) -> Void) async -> Result<Void, Error> { fatalError() }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "objcMethod", modifiers: [
+                .objc, .static
+            ], params: [
+                FunctionParameter(name: "name", label: nil, type: "String?")
+            ], returnType: "[String: Any]", canThrow: true)
+        ])
+    }
+    
+    func test_functionWithClosure() throws {
+        let src = """
+        struct S {
+           func complex(param: (Int, String), closure: (Int) -> Void) async -> Result<Void, Error> { fatalError() }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "complex", modifiers: nil, params: [
+                FunctionParameter(name: "param", label: nil, type: "(Int, String)"),
+                FunctionParameter(name: "closure", label: nil, type: "(Int) -> Void")
+            ], returnType: "Result<Void, Error>", canThrow: false)
+        ])
+    }
+    
+    func test_functionWeirdName() throws {
+        let src = """
+        struct S {
             func `weird-name`() {}
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "`weird-name`", modifiers: nil, params: nil, returnType: "Void", canThrow: false)
+        ])
+    }
+    
+    func test_classFunction() throws {
+        let src = """
+        struct S {
             private class func classMethod() {}
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .struct, name: "S")
+        XCTAssertNotNil(obj)
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "classMethod", modifiers: [
+                .private, .class
+            ], params: nil, returnType: "Void", canThrow: false)
+        ])
+    }
+    
+    func test_functionAnonymousLabel() throws {
+        let src = """
+        struct S {
             func externalLabel(_ internalName: Int) {}
         }
         """
         let file = SwiftParser.parseFile(fileContent: src)
         let obj = findObject(in: file, type: .struct, name: "S")
         XCTAssertNotNil(obj)
-        // foo
-        let foo = findMethod(obj!, methodName: "foo")
-        XCTAssertNotNil(foo)
-        XCTAssertEqual(foo?.returnType, "Void")
-        // add
-        let add = findMethod(obj!, methodName: "add")
-        XCTAssertNotNil(add)
-        XCTAssertEqual(add?.params?.count, 2)
-        XCTAssertEqual(add?.params?[0].name, "a")
-        XCTAssertEqual(add?.params?[0].type, "Int")
-        XCTAssertEqual(add?.params?[1].label, "b")
-        XCTAssertEqual(add?.params?[1].type, "String")
-        XCTAssertEqual(add?.returnType, "String")
-        // objcMethod
-        let objc = findMethod(obj!, methodName: "objcMethod")
-        XCTAssertNotNil(objc)
-        XCTAssertTrue(objc!.canThrow)
-        XCTAssertTrue(objc!.modifiers?.contains(.objc) ?? false)
-        XCTAssertTrue(objc!.modifiers?.contains(.static) ?? false)
-        XCTAssertEqual(objc?.returnType, "[String: Any]")
-        // complex return extraction should capture Result<Void, Error>
-        let complex = findMethod(obj!, methodName: "complex")
-        XCTAssertNotNil(complex)
-        XCTAssertEqual(complex?.returnType, "Result<Void, Error>")
-        // weird name kept (backticks trimmed at type-level; method-level name might include backticks)
-        let weird = findMethod(obj!, methodName: "`weird-name`") ?? findMethod(obj!, methodName: "weird-name")
-        XCTAssertNotNil(weird)
-        // classMethod modifiers
-        let classM = findMethod(obj!, methodName: "classMethod")
-        XCTAssertNotNil(classM)
-        XCTAssertTrue(classM?.modifiers?.contains(.class) ?? false)
-        XCTAssertTrue(classM?.modifiers?.contains(.private) ?? false)
-        // external label underscore behavior
-        let external = findMethod(obj!, methodName: "externalLabel")
-        XCTAssertNotNil(external)
-        XCTAssertEqual(external?.params?.first?.label, nil) // '_' external -> nil or treated specially
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "externalLabel", modifiers: nil, params: [
+                FunctionParameter(name: "internalName", label: "_", type: "Int")
+            ], returnType: "Void", canThrow: false)
+        ])
     }
     
     func test_nested_types_detection() throws {
@@ -281,12 +345,13 @@ final class SwiftParserTests: XCTestCase {
         let file = SwiftParser.parseFile(fileContent: src)
         let obj = findObject(in: file, type: .class, name: "C")
         XCTAssertNotNil(obj)
-        let f = findMethod(obj!, methodName: "complicated")
-        XCTAssertNotNil(f)
-        XCTAssertEqual(f?.params?.count, 2)
-        XCTAssertEqual(f?.params?[0].type, "(Int, String)")
-        XCTAssertEqual(f?.params?[1].type, "(Result<Int, Error>) -> Void")
-        XCTAssertEqual(f?.returnType, "((Int) -> String)?")
+        
+        XCTAssertEqual(obj?.functions, [
+            ObjectMethod(name: "complicated", modifiers: nil, params: [
+                FunctionParameter(name: "a", label: nil, type: "(Int, String)"),
+                FunctionParameter(name: "handler", label: nil, type: "(Result<Int, Error>) -> Void")
+            ], returnType: "((Int) -> String)?", canThrow: false)
+        ])
     }
     
 }
