@@ -154,22 +154,30 @@ struct SwiftParser {
         return imports.unique
     }
 
-    private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
-        let characters = Array(txt)
-        guard location < characters.count,
-              let startIdx = characters[location...].firstIndex(of: "{") else { return nil }
-        
-        var braceCount = 0
-        for i in startIdx..<characters.count {
-            if characters[i] == "{" { braceCount += 1 }
-            else if characters[i] == "}" { braceCount -= 1 }
-            if braceCount == 0 {
-                let startPos = startIdx + 1
-                return NSRange(location: startPos, length: i - startPos)
-            }
+private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
+    let ns = txt as NSString
+    let length = ns.length
+    guard location < length else { return nil }
+    let searchRange = NSRange(location: location, length: length - location)
+    let openRange = ns.range(of: "{", options: [], range: searchRange)
+    guard openRange.location != NSNotFound else { return nil }
+
+    let openChar: unichar = 123  // '{'
+    let closeChar: unichar = 125 // '}'
+    var braceCount = 0
+    var i = openRange.location
+    while i < length {
+        let ch = ns.character(at: i)
+        if ch == openChar { braceCount += 1 }
+        else if ch == closeChar { braceCount -= 1 }
+        if braceCount == 0 {
+            let startPos = openRange.location + 1
+            return NSRange(location: startPos, length: i - startPos)
         }
-        return nil
+        i += 1
     }
+    return nil
+}
 
     private static func harvestMethods(from body: String) -> [ObjectMethod] {
         var methods: [ObjectMethod] = []
@@ -216,57 +224,121 @@ struct SwiftParser {
 
     private static func harvestEnumCases(from body: String) -> [EnumCase] {
         var cases: [EnumCase] = []
-        let casePattern = "\\bcase\\s+([a-z][a-zA-Z0-9_]+)\\s*(\\(([^)]*)\\))?\\s*(=\\s*([^\\n\\r,]*))?"
-        
-        guard let regex = try? NSRegularExpression(pattern: casePattern) else { return [] }
+        // find "case " occurrences and capture until end of line or '}' — simpler: line-based approach
+        let pattern = "^\\s*case\\s+([^\\n\\r{]+)"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return [] }
         let range = NSRange(location: 0, length: body.utf16.count)
-        
         for result in regex.matches(in: body, options: [], range: range) {
-            let name = (body as NSString).substring(with: result.range(at: 1))
-            
-            var parameters: [FunctionParameter]? = nil
-            if result.range(at: 3).location != NSNotFound {
-                let paramsString = (body as NSString).substring(with: result.range(at: 3))
-                let parsedParams = parseParameters(paramsString)
-                parameters = parsedParams.isEmpty ? nil : parsedParams
+            if result.range(at: 1).location == NSNotFound { continue }
+            let list = (body as NSString).substring(with: result.range(at: 1))
+            let items = splitTopLevel(list, separator: ",")
+            for item in items {
+                let it = item.trimmingCharacters(in: .whitespacesAndNewlines)
+                if it.isEmpty { continue }
+                // possible forms:
+                // name
+                // name = raw
+                // name(params)
+                // name(params) = raw
+                // parse name + params + raw
+                var name = it
+                var params: [FunctionParameter]? = nil
+                var rawValue: String? = nil
+
+                // extract raw value (top-level '=')
+                let rawSplit = splitTopLevel(it, separator: "=")
+                if rawSplit.count >= 2 {
+                    rawValue = rawSplit[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    name = rawSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                // extract params if present
+                if let openIdx = name.firstIndex(of: "("), let closeIdx = name.lastIndex(of: ")"), openIdx < closeIdx {
+                    let paramsStr = String(name[name.index(after: openIdx)..<closeIdx])
+                    let parsedParams = parseParameters(paramsStr)
+                    params = parsedParams.isEmpty ? nil : parsedParams
+                    name = name[..<openIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                cases.append(EnumCase(name: String(name), rawValue: rawValue, params: params))
             }
-            
-            var rawValue: String? = nil
-            if result.range(at: 5).location != NSNotFound {
-                rawValue = (body as NSString).substring(with: result.range(at: 5)).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            
-            cases.append(EnumCase(
-                name: name,
-                rawValue: rawValue,
-                params: parameters
-            ))
         }
         return cases
     }
+    // Utility: split top-level by separator, ignoruje zagnieżdżone nawiasy i stringi
+    private static func splitTopLevel(_ s: String, separator: Character) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var stack: [Character] = []
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var prevWasEscape = false
 
-    private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
-        if paramsString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [] }
-        return paramsString.components(separatedBy: ",").compactMap { part in
-            let components = part.components(separatedBy: ":")
-            guard components.count == 2 else { return nil }
-            var name = components[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            var label : String?
-            let nameParts = name.split(separator: " ")
-            if nameParts.count == 2 {
-                name = String(nameParts[1])
-                label = String(nameParts[0])
+        for ch in s {
+            if ch == "\\" {
+                prevWasEscape.toggle()
+                current.append(ch)
+                continue
             }
-            var paramType = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            let splittedParamType = paramType.split(separator: "=")
-            if splittedParamType.count == 2 {
-                paramType = String(splittedParamType[0].trimmingCharacters(in: .whitespacesAndNewlines))
+            if !prevWasEscape {
+                if ch == "\"" && !inSingleQuote {
+                    inDoubleQuote.toggle()
+                } else if ch == "'" && !inDoubleQuote {
+                    inSingleQuote.toggle()
+                } else if !inSingleQuote && !inDoubleQuote {
+                    if ch == "(" || ch == "[" || ch == "{" || ch == "<" {
+                        stack.append(ch)
+                    } else if ch == ")" || ch == "]" || ch == "}" || ch == ">" {
+                        if !stack.isEmpty { stack.removeLast() }
+                    } else if ch == separator && stack.isEmpty {
+                        parts.append(current)
+                        current = ""
+                        continue
+                    }
+                }
             }
-            return FunctionParameter(
-                name: name,
-                label: label,
-                type: paramType
-            )
+            // reset escape flag unless current char was backslash handled above
+            prevWasEscape = false
+            current.append(ch)
         }
+        if !current.isEmpty { parts.append(current) }
+        return parts
     }
+    
+private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
+    let trimmed = paramsString.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return [] }
+
+    let rawParts = splitTopLevel(trimmed, separator: ",")
+    return rawParts.compactMap { rawPart in
+        let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !part.isEmpty else { return nil }
+        // split on first ':' (type separator)
+        guard let colonIdx = part.firstIndex(of: ":") else { return nil }
+        let namePart = part[..<colonIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+        var typePart = part[part.index(after: colonIdx)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        // remove default value if present: split on '=', but only top-level
+        if let eqIdx = splitTopLevel(String(typePart), separator: "=").first?.startIndex {
+            // keep left of '=' already handled by splitTopLevel: simpler to split by '=' top-level
+            let left = splitTopLevel(String(typePart), separator: "=")[0]
+            typePart = left.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            // no default
+            // nothing
+        }
+        // parse name / label
+        let nameTokens = namePart.split(separator: " ", omittingEmptySubsequences: true).map { String($0) }
+        var label: String? = nil
+        var name: String
+        if nameTokens.count == 1 {
+            name = nameTokens[0]
+            if name == "_" { name = "_" } // local name '_' is allowed; you may decide to treat label as nil
+            if name == "_" { label = nil } // external name is _
+        } else {
+            label = nameTokens.first
+            name = nameTokens.last ?? nameTokens.joined()
+            if label == "_" { label = nil }
+        }
+        return FunctionParameter(name: name, label: label, type: typePart)
+    }
+}
 }
