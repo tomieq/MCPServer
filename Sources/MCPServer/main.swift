@@ -8,12 +8,7 @@ import Dispatch
 setvbuf(stdout, nil, _IONBF, 0)
 #endif
 
-let folder = try Folder()
-let fileCache = FileCache(folder: folder)
-
-let logger = Logger("MCPServer")
-let rest = try RestServer(folder: folder, cache: fileCache)
-let folderMonitor = try FolderMonitor(folder: folder.realUrl) { change in
-    fileCache.fileChanged(change)
-}
-RunLoop.main.run()
+let path = "/Users/tomieq/dev/MCPServer/Sources"
+let extenssions = ["swift"]
+let files = try FileItem.harvest(url: URL(fileURLWithPath: path), extensions: extenssions)
+try files?.jsonOneLine!.write(to: URL(fileURLWithPath: "project.json"), atomically: true, encoding: .utf8)
