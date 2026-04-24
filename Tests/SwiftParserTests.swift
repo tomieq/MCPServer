@@ -139,6 +139,37 @@ final class SwiftParserTests: XCTestCase {
     }
     
     
+    func test_enum_with_variable() throws {
+        let src = """
+        enum Endpoint {
+            case start(Api)
+            case end(Api)
+        
+            var url: String {
+                switch self {
+                case let .start(api):
+                    return "\\(api.rawValue)/start"
+                case let .end(api):
+                    return "\\(api.rawValue)/end"
+                }
+            }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .enum, name: "Endpoint")
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj?.cases, [
+            .init(name: "start", rawValue: nil, params: [
+                EnumParameter(name: nil, type: "Api")
+            ]),
+            .init(name: "end", rawValue: nil, params: [
+                EnumParameter(name: nil, type: "Api")
+            ]),
+        ]
+        )
+    }
+    
+    
     func test_functionNoArguments() throws {
         let src = """
         struct S {

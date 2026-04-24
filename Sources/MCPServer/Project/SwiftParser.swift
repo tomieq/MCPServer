@@ -355,50 +355,99 @@ struct SwiftParser {
         return methods
     }
     
+    
     private static func harvestEnumCases(from body: String) -> [EnumCase] {
         var cases: [EnumCase] = []
-        // find "case " occurrences and capture until end of line or '}' — simpler: line-based approach
-        let pattern = "^\\s*case\\s+([^\\n\\r{]+)"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else { return [] }
-        let range = NSRange(location: 0, length: body.utf16.count)
-        for result in regex.matches(in: body, options: [], range: range) {
-            if result.range(at: 1).location == NSNotFound { continue }
-            let list = (body as NSString).substring(with: result.range(at: 1))
-            let items = splitTopLevel(list, separator: ",")
+        // Skanuj ciało znak po znaku, utrzymując licznik depth tylko dla nawiasów klamrowych.
+        // Przetwarzaj tylko linie, które występują przy depth == 0 (top-level w enumie).
+        var depth = 0
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var prevWasEscape = false
+        var currentLine = ""
+
+        func processLine(_ line: String) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            // interesują nas tylko linie rozpoczynające się deklaracją 'case'
+            // dopuszczamy także 'case' bezpośrednio (rzadko), lub 'case ' z dalszą treścią
+            guard trimmed.hasPrefix("case ") || trimmed == "case" else { return }
+
+            // Usuń słowo "case" i przetwórz resztę
+            let afterCase = String(trimmed.dropFirst(min(4, trimmed.count))).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !afterCase.isEmpty else { return }
+
+            // Podziel listę przypadków top-level (mogą być oddzielone przecinkami)
+            let items = splitTopLevel(afterCase, separator: ",")
             for item in items {
                 let it = item.trimmingCharacters(in: .whitespacesAndNewlines)
                 if it.isEmpty { continue }
-                // possible forms:
-                // name
-                // name = raw
-                // name(params)
-                // name(params) = raw
-                // parse name + params + raw
+
                 var name = it
                 var params: [EnumParameter]? = nil
                 var rawValue: String? = nil
-                
-                // extract raw value (top-level '=')
+
+                // top-level '=' -> raw value
                 let rawSplit = splitTopLevel(it, separator: "=")
                 if rawSplit.count >= 2 {
                     rawValue = rawSplit[1]
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: .init(charactersIn: "\""))
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                     name = rawSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-                
-                // extract params if present
-                if let openIdx = name.firstIndex(of: "("), let closeIdx = name.lastIndex(of: ")"), openIdx < closeIdx {
+
+                // payload parameters: name(params)
+                if let openIdx = name.firstIndex(of: "("),
+                   let closeIdx = name.lastIndex(of: ")"),
+                   openIdx < closeIdx {
                     let paramsStr = String(name[name.index(after: openIdx)..<closeIdx])
                     let parsedParams = parseEnumParameters(paramsStr)
                     params = parsedParams.isEmpty ? nil : parsedParams
-                    name = name[..<openIdx].trimmingCharacters(in: .whitespacesAndNewlines)
+                    name = String(name[..<openIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-                cases.append(EnumCase(name: String(name), rawValue: rawValue, params: params))
+
+                cases.append(EnumCase(name: name, rawValue: rawValue, params: params))
             }
         }
+
+        for ch in body {
+            if ch == "\\" {
+                prevWasEscape.toggle()
+                currentLine.append(ch)
+                continue
+            }
+            if !prevWasEscape {
+                if ch == "\"" && !inSingleQuote {
+                    inDoubleQuote.toggle()
+                } else if ch == "'" && !inDoubleQuote {
+                    inSingleQuote.toggle()
+                } else if !inSingleQuote && !inDoubleQuote {
+                    if ch == "{" {
+                        depth += 1
+                    } else if ch == "}" {
+                        depth = max(0, depth - 1)
+                    }
+                }
+            }
+            prevWasEscape = false
+
+            if ch == "\n" || ch == "\r" {
+                if depth == 0 {
+                    processLine(currentLine)
+                }
+                currentLine = ""
+            } else {
+                currentLine.append(ch)
+            }
+        }
+        // ostatnia linia
+        if !currentLine.isEmpty && depth == 0 {
+            processLine(currentLine)
+        }
+
         return cases
     }
+    
     // Utility: split top-level by separator, ignoruje zagnieżdżone nawiasy i stringi
     private static func splitTopLevel(_ s: String, separator: Character) -> [String] {
         var parts: [String] = []
