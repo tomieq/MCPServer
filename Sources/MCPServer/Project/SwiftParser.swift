@@ -5,6 +5,7 @@
 //  Created by: tomieq on 24/04/2026
 //
 import Foundation
+import SwiftExtensions
 
 // MARK: - Models
 
@@ -32,12 +33,12 @@ struct ObjectMethod: Equatable, Hashable, Codable {
     let modifiers: [MethodModifier]?
     let parameters: [FunctionParameter]?
     let returnType: String
-    let isThrowable: Bool
+    let canThrow: Bool
 }
 
 struct ObjectDefinition: Equatable, Hashable, Codable {
     let objectType: ObjectType
-    let name: String
+    let objectName: String
     let modifiers: [ObjectTypeModifier]?
     let inheritsFrom: String?
     let functions: [ObjectMethod]?
@@ -76,8 +77,8 @@ struct SwiftParser {
                     let functions = harvestMethods(from: bodyContent)
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
-                        name: name,
-                        modifiers: usedModifiers.isEmpty ? nil : usedModifiers,
+                        objectName: name,
+                        modifiers: usedModifiers.isEmpty ? nil : usedModifiers.unique,
                         inheritsFrom: inheritsFrom,
                         functions: functions.isEmpty ? nil : functions
                     ))
@@ -132,7 +133,7 @@ struct SwiftParser {
             // This now contains only the line containing the signature
             let signatureSuffix = (body as NSString).substring(with: result.range(at: 5))
             
-            let isThrowable = signatureSuffix.contains("throws")
+            let canThrow = signatureSuffix.contains("throws")
             var returnType = "Void"
             if let arrowRange = signatureSuffix.range(of: "->") {
                 let afterArrow = signatureSuffix[arrowRange.upperBound...]
@@ -148,7 +149,7 @@ struct SwiftParser {
                 modifiers: modifiers.isEmpty ? nil : modifiers,
                 parameters: parameters.isEmpty ? nil : parameters,
                 returnType: returnType,
-                isThrowable: isThrowable
+                canThrow: canThrow
             ))
         }
         return methods
