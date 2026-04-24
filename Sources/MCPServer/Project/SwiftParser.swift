@@ -142,13 +142,19 @@ struct SwiftParser {
             
             let isThrowable = signatureSuffix.contains("throws")
             
-            // Wyciąganie returnType
-            var returnType = "Void" // Domyślnie Void w Swifcie
+            // returnType
+            var returnType = "Void"
             if let arrowRange = signatureSuffix.range(of: "->") {
-                let afterArrow = signatureSuffix[arrowRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-                // Bierzemy tylko do pierwszego znaku nowej linii lub klamry (na wypadek braku spacji)
-                let cleanReturn = afterArrow.components(separatedBy: CharacterSet(charactersIn: "{ \n\r")).first ?? "Void"
-                returnType = cleanReturn
+                let afterArrow = signatureSuffix[arrowRange.upperBound...]
+                
+                if let braceIndex = afterArrow.firstIndex(of: "{") {
+                    let cleanReturn = afterArrow[..<braceIndex]
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    returnType = cleanReturn.isEmpty ? "Void" : String(cleanReturn)
+                } else {
+                    let cleanReturn = afterArrow.trimmingCharacters(in: .whitespacesAndNewlines)
+                    returnType = cleanReturn.isEmpty ? "Void" : String(cleanReturn)
+                }
             }
             
             methods.append(ObjectMethod(
