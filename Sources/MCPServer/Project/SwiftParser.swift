@@ -56,6 +56,7 @@ struct ObjectDefinition: Equatable, Hashable, Codable {
     let whereClause: String?
     let functions: [ObjectMethod]?
     let cases: [EnumCase]?
+    let objects: [ObjectDefinition]?
 }
 
 struct SwiftFile: Equatable, Hashable, Codable {
@@ -84,6 +85,43 @@ struct SwiftParser {
     
     static func parseObjecsTypes(fileContent txt: String, config: ParserConfig) -> [ObjectDefinition] {
         let txt = CommentRemover.removeComments(txt)
+
+        // compute map of brace-depth at each UTF-16 offset so we can know which regex matches are top-level
+        let utf16 = Array(txt.utf16)
+        var depthAtUtf16 = [Int](repeating: 0, count: utf16.count + 1)
+        var depth = 0
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var prevWasEscape = false
+        for i in 0..<utf16.count {
+            // depth before processing character at utf16 index i
+            depthAtUtf16[i] = depth
+            let ch = utf16[i]
+            if ch == 92 { // backslash '\'
+                prevWasEscape.toggle()
+                continue
+            }
+            if !prevWasEscape {
+                if ch == 34 && !inSingleQuote { // double quote
+                    inDoubleQuote.toggle()
+                } else if ch == 39 && !inDoubleQuote { // single quote
+                    inSingleQuote.toggle()
+                } else if !inSingleQuote && !inDoubleQuote {
+                    if ch == 123 { // '{'
+                        depth += 1
+                    } else if ch == 125 { // '}'
+                        depth = max(0, depth - 1)
+                    }
+                }
+            } else {
+                // consumed an escape; reset
+                prevWasEscape = false
+            }
+        }
+        // final position
+        depthAtUtf16[utf16.count] = depth
+
+
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
         
@@ -99,6 +137,14 @@ struct SwiftParser {
             
             for result in regex.matches(in: txt, options: [], range: range) {
                 guard result.range(at: 1).location != NSNotFound else { continue }
+
+                let matchStart = result.range.location
+                let matchDepth = (matchStart >= 0 && matchStart < depthAtUtf16.count) ? depthAtUtf16[matchStart] : 0
+                if matchDepth != 0 {
+                    // to dopasowanie jest wewnątrz jakiegoś bloku (np. inside a class/enum) —
+                    // zostanie znalezione, kiedy zrobimy rekurencyjne parse na bodyContent.
+                    continue
+                }
                 // rawHeader contains name + optional inheritance + optional where-clause (everything between keyword and '{')
                 var rawHeader = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
                 
@@ -193,6 +239,7 @@ struct SwiftParser {
                     } else {
                         cases = nil
                     }
+                    let nestedObjects = Self.parseObjecsTypes(fileContent: bodyContent, config: config)
                     
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
@@ -201,7 +248,8 @@ struct SwiftParser {
                         inheritsFrom: inheritsFrom,
                         whereClause: whereClause,
                         functions: functions.isEmpty ? nil : functions,
-                        cases: cases?.isEmpty == false ? cases : nil
+                        cases: cases?.isEmpty == false ? cases : nil,
+                        objects: nestedObjects.isEmpty ? nil : nestedObjects
                     ))
                 }
             }

@@ -87,7 +87,42 @@ final class SwiftParserTests: XCTestCase {
                                                              returnType: "Void",
                                                              canThrow: true)
                                              ],
-                                             cases: nil))
+                                             cases: nil,
+                                            objects: nil))
+    }
+    
+    func test_enumInClass() throws {
+        let src = """
+        class MyClass {
+            enum CodingKeys: Codable {
+                case id = "ID"
+            }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = file.objects.last
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj, ObjectDefinition(objectType: .class,
+                                             name: "MyClass",
+                                             modifiers: nil,
+                                             inheritsFrom: nil,
+                                             whereClause: nil,
+                                             functions: nil,
+                                             cases: nil,
+                                             objects: [
+                                                ObjectDefinition(objectType: .enum,
+                                                                 name: "CodingKeys",
+                                                                 modifiers: nil,
+                                                                 inheritsFrom: "Codable",
+                                                                 whereClause: nil,
+                                                                 functions: nil,
+                                                                 cases: [
+                                                                   EnumCase(name: "id",
+                                                                            rawValue: "ID",
+                                                                            params: nil)
+                                                                 ],
+                                                                 objects: nil)
+                                             ]))
     }
     
     func test_simple_enum() throws {
