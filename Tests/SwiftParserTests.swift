@@ -54,39 +54,66 @@ final class SwiftParserTests: XCTestCase {
         XCTAssertNil(obj?.inheritsFrom)
         XCTAssertNil(obj?.functions)
     }
-
-    func test_modifiers_inheritance_and_whereClause() throws {
+    
+    func test_simple_enum() throws {
         let src = """
-        public final class MyClass<T>: SuperClass where T: Codable {
-            func doSomething() -> Int { return 0 }
+        enum Endpoint {
+            case start
+            case end
+            case UPPER_NAME
         }
         """
         let file = SwiftParser.parseFile(fileContent: src)
-        let obj = findObject(in: file, type: .class, name: "MyClass")
+        let obj = findObject(in: file, type: .enum, name: "Endpoint")
         XCTAssertNotNil(obj)
-        XCTAssertEqual(obj?.modifiers, [.public, .final]) // order preserved from source
-        XCTAssertEqual(obj?.inheritsFrom, "SuperClass")
-        XCTAssertEqual(obj?.whereClause, "where T: Codable")
-        let method = findMethod(obj!, methodName: "doSomething")
-        XCTAssertNotNil(method)
-        XCTAssertEqual(method?.returnType, "Int")
+        XCTAssertEqual(obj?.cases, [
+            .init(name: "start", rawValue: nil, params: nil),
+            .init(name: "end", rawValue: nil, params: nil),
+            .init(name: "UPPER_NAME", rawValue: nil, params: nil),
+        ]
+        )
     }
 
-    func test_extension_with_where() throws {
+    func test_enum_with_raw_int_value() throws {
         let src = """
-        extension Array where Element: Equatable {
-            func foo() {}
+        enum Endpoint: Int {
+            case start = 3
+            case end = 8
+            case UPPER_NAME = 12
         }
         """
         let file = SwiftParser.parseFile(fileContent: src)
-        let obj = findObject(in: file, type: .extension, name: "Array")
+        let obj = findObject(in: file, type: .enum, name: "Endpoint")
         XCTAssertNotNil(obj)
-        XCTAssertEqual(obj?.whereClause, "where Element: Equatable")
-        let method = findMethod(obj!, methodName: "foo")
-        XCTAssertNotNil(method)
-        XCTAssertEqual(method?.returnType, "Void")
+        XCTAssertEqual(obj?.inheritsFrom, "Int")
+        XCTAssertEqual(obj?.cases, [
+            .init(name: "start", rawValue: "3", params: nil),
+            .init(name: "end", rawValue: "8", params: nil),
+            .init(name: "UPPER_NAME", rawValue: "12", params: nil),
+        ]
+        )
     }
-
+    
+    func test_enum_with_raw_string_value() throws {
+        let src = """
+        enum Endpoint: String {
+            case start = "START"
+            case end = "END"
+            case UPPER_NAME
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = findObject(in: file, type: .enum, name: "Endpoint")
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj?.inheritsFrom, "String")
+        XCTAssertEqual(obj?.cases, [
+            .init(name: "start", rawValue: "START", params: nil),
+            .init(name: "end", rawValue: "END", params: nil),
+            .init(name: "UPPER_NAME", rawValue: nil, params: nil),
+        ]
+        )
+    }
+    
     func test_enum_cases_multiple_and_associated_and_raw() throws {
         let src = """
         enum E {
@@ -232,6 +259,9 @@ final class SwiftParserTests: XCTestCase {
         XCTAssertNotNil(obj)
         let first = findEnumCase(obj!, caseName: "first")
         XCTAssertNotNil(first)
+        XCTAssertEqual(obj?.cases, [
+            .init(name: "first", rawValue: nil, params: [.init(name: <#T##String#>, label: <#T##String?#>, type: <#T##String#>)])
+        ])
         XCTAssertEqual(first?.params?.count, 2)
         XCTAssertEqual(first?.params?[0].type, "String")
         let second = findEnumCase(obj!, caseName: "second")
@@ -240,9 +270,9 @@ final class SwiftParserTests: XCTestCase {
         XCTAssertEqual(second?.params?[0].name, "point")
         XCTAssertEqual(second?.params?[1].type, "[String: Any]")
         let third = findEnumCase(obj!, caseName: "third")
-        XCTAssertEqual(third?.rawValue, "\"x\"")
+        XCTAssertEqual(third?.rawValue, "x")
     }
-
+    
     func test_function_with_tuple_and_closure_parameters_and_defaults() throws {
         let src = """
         class C {

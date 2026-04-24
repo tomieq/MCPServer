@@ -376,7 +376,9 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 // extract raw value (top-level '=')
                 let rawSplit = splitTopLevel(it, separator: "=")
                 if rawSplit.count >= 2 {
-                    rawValue = rawSplit[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    rawValue = rawSplit[1]
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .trimmingCharacters(in: .init(charactersIn: "\""))
                     name = rawSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
                 }
 
