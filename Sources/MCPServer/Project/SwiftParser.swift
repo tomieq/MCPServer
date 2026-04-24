@@ -31,20 +31,20 @@ struct FunctionParameter: Equatable, Hashable, Codable {
 struct ObjectMethod: Equatable, Hashable, Codable {
     let name: String
     let modifiers: [MethodModifier]?
-    let parameters: [FunctionParameter]?
+    let params: [FunctionParameter]?
     let returnType: String
     let canThrow: Bool
 }
 
 struct EnumCase: Equatable, Hashable, Codable {
-    let caseName: String
+    let name: String
     let rawValue: String?
-    let parameters: [FunctionParameter]?
+    let params: [FunctionParameter]?
 }
 
 struct ObjectDefinition: Equatable, Hashable, Codable {
     let objectType: ObjectType
-    let objectName: String
+    let name: String
     let modifiers: [ObjectTypeModifier]?
     let inheritsFrom: String?
     let functions: [ObjectMethod]?
@@ -95,12 +95,12 @@ struct SwiftParser {
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
                     
-                    let functions = harvestMethods(from: bodyContent)
+                    let functions: [ObjectMethod] = harvestMethods(from: bodyContent)
                     let cases = objectType == .enum ? harvestEnumCases(from: bodyContent) : nil
                     
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
-                        objectName: name,
+                        name: name,
                         modifiers: usedModifiers.isEmpty ? nil : usedModifiers.unique,
                         inheritsFrom: inheritsFrom,
                         functions: functions.isEmpty ? nil : functions,
@@ -187,7 +187,7 @@ struct SwiftParser {
             methods.append(ObjectMethod(
                 name: name,
                 modifiers: modifiers.isEmpty ? nil : modifiers,
-                parameters: parameters.isEmpty ? nil : parameters,
+                params: parameters.isEmpty ? nil : parameters,
                 returnType: returnType,
                 canThrow: canThrow
             ))
@@ -218,9 +218,9 @@ struct SwiftParser {
             }
             
             cases.append(EnumCase(
-                caseName: name,
+                name: name,
                 rawValue: rawValue,
-                parameters: parameters
+                params: parameters
             ))
         }
         return cases
