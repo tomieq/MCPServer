@@ -167,10 +167,15 @@ struct SwiftParser {
                 name = String(nameParts[1])
                 label = String(nameParts[0])
             }
+            var paramType = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let splittedParamType = paramType.split(separator: "=")
+            if splittedParamType.count == 2 {
+                paramType = String(splittedParamType[0].trimmingCharacters(in: .whitespacesAndNewlines))
+            }
             return FunctionParameter(
                 name: name,
                 label: label,
-                type: components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                type: paramType
             )
         }
     }
