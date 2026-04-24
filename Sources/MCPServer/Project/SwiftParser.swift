@@ -81,6 +81,7 @@ struct SwiftParser {
                          imports: imports.isEmpty ? nil : imports)
     }
     
+    
     static func parseObjecsTypes(fileContent txt: String, config: ParserConfig) -> [ObjectDefinition] {
         let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
@@ -91,32 +92,54 @@ struct SwiftParser {
         
         for objectType in ObjectType.allCases {
             let rawObjectType = objectType.rawValue
-            // Pattern: optional modifiers, keyword (class/enum/...), then capture name (anything up to ":" or "{" or newline)
-            // We allow backticks and generics inside the captured name; we'll trim " where ..." out of the name later.
-            let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(rawObjectType)\\b\\s+([^\\{\\n\\r:]+)(?:\\s*:\\s*([^\\{]*))?"
+            // Capture the whole header part (everything up to the opening brace or newline),
+            // so we can correctly parse generics that include ':' inside them.
+            let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(rawObjectType)\\b\\s+([^\\{\\n\\r]+)"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
             
             for result in regex.matches(in: txt, options: [], range: range) {
-                // result.range(at: 1) -> captured name-like portion
-                // result.range(at: 2) -> optional inheritsFrom (after colon)
                 guard result.range(at: 1).location != NSNotFound else { continue }
-                var rawName = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                // rawHeader contains name + optional inheritance + optional where-clause (everything between keyword and '{')
+                var rawHeader = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
                 
-                // If name contains a 'where' clause inline (unlikely), strip it off from name
-                if let whereRangeInName = rawName.range(of: "\\bwhere\\b", options: .regularExpression) {
-                    rawName = String(rawName[..<whereRangeInName.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                // Find 'where' at top-level in rawHeader (simple regex search; OK because where usually top-level here)
+                var whereClause: String? = nil
+                if let whereRegex = try? NSRegularExpression(pattern: "\\bwhere\\b", options: [.caseInsensitive]) {
+                    let headerNS = rawHeader as NSString
+                    let hRange = NSRange(location: 0, length: headerNS.length)
+                    if let whereMatch = whereRegex.firstMatch(in: rawHeader, options: [], range: hRange) {
+                        let whereStart = whereMatch.range.location
+                        if whereStart < headerNS.length {
+                            let wherePart = headerNS.substring(from: whereStart).trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !wherePart.isEmpty {
+                                whereClause = wherePart
+                                // remove where part from rawHeader so it doesn't pollute name/inherits parsing
+                                rawHeader = headerNS.substring(to: whereStart).trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                        }
+                    }
                 }
                 
+                // Find top-level ':' separator (outside generics/parentheses/brackets/quotes).
+                var inheritsFrom: String? = nil
+                if let colonIndex = topLevelIndex(of: ":", in: rawHeader) {
+                    // split by that colon
+                    let idx = colonIndex
+                    let namePart = String(rawHeader[..<idx]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let inheritsPartStart = rawHeader.index(after: idx)
+                    let inheritsPart = String(rawHeader[inheritsPartStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    rawHeader = namePart
+                    if !inheritsPart.isEmpty {
+                        inheritsFrom = inheritsPart
+                    }
+                }
+                
+                // rawHeader now should be just the name (including generics, backticks, etc.)
+                var rawName = rawHeader
                 // Remove surrounding backticks if present
                 rawName = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "`")).trimmingCharacters(in: .whitespacesAndNewlines)
                 if rawName.isEmpty { continue }
                 let name = rawName
-                
-                var inheritsFrom: String? = nil
-                if result.numberOfRanges >= 3, result.range(at: 2).location != NSNotFound {
-                    inheritsFrom = (txt as NSString).substring(with: result.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if inheritsFrom?.isEmpty == true { inheritsFrom = nil }
-                }
                 
                 // Extract modifiers that appear before the keyword (take the substring from start of match up to flavorName)
                 let fullMatchRange = result.range
@@ -133,19 +156,17 @@ struct SwiftParser {
                     // bodyRange.location is the first character INSIDE the braces (openBraceLocation + 1)
                     // therefore the open brace position is bodyRange.location - 1 (if > 0)
                     let openBraceLocation = max(0, bodyRange.location - 1)
-                    // header is portion between end of regex match and the opening brace
+                    // header is portion between end of regex match and the opening brace (might be empty because we captured header earlier)
                     let headerStart = fullMatchRange.location + fullMatchRange.length
                     let headerLength = max(0, openBraceLocation - headerStart)
-                    var whereClause: String? = nil
-                    if headerLength > 0 {
+                    if whereClause == nil && headerLength > 0 {
+                        // Fallback: try to extract where clause from header area (if not already extracted)
                         let headerRange = NSRange(location: headerStart, length: headerLength)
                         let header = (txt as NSString).substring(with: headerRange).trimmingCharacters(in: .whitespacesAndNewlines)
-                        // Look for where clause in header (top-level), e.g. "where T: Equatable"
                         if let whereRegex = try? NSRegularExpression(pattern: "\\bwhere\\b", options: [.caseInsensitive]) {
                             let headerNS = header as NSString
                             let hRange = NSRange(location: 0, length: headerNS.length)
                             if let whereMatch = whereRegex.firstMatch(in: header, options: [], range: hRange) {
-                                // take everything from 'where' to the end of header
                                 let whereStart = whereMatch.range.location
                                 if whereStart < headerNS.length {
                                     let wherePart = headerNS.substring(from: whereStart).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -187,6 +208,42 @@ struct SwiftParser {
         }
         return definitions
     }
+    
+    // Helper: find index of a separator character that's at top-level (not inside <>, (), [], {}, or quotes)
+    private static func topLevelIndex(of separator: Character, in s: String) -> String.Index? {
+        var stack: [Character] = []
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var prevWasEscape = false
+        var i = s.startIndex
+        while i < s.endIndex {
+            let ch = s[i]
+            if ch == "\\" {
+                prevWasEscape.toggle()
+                i = s.index(after: i)
+                continue
+            }
+            if !prevWasEscape {
+                if ch == "\"" && !inSingleQuote {
+                    inDoubleQuote.toggle()
+                } else if ch == "'" && !inDoubleQuote {
+                    inSingleQuote.toggle()
+                } else if !inSingleQuote && !inDoubleQuote {
+                    if ch == "(" || ch == "[" || ch == "{" || ch == "<" {
+                        stack.append(ch)
+                    } else if ch == ")" || ch == "]" || ch == "}" || ch == ">" {
+                        if !stack.isEmpty { stack.removeLast() }
+                    } else if ch == separator && stack.isEmpty {
+                        return i
+                    }
+                }
+            }
+            prevWasEscape = false
+            i = s.index(after: i)
+        }
+        return nil
+    }
+    
     
     private static func harvestImports(from txt: String) -> [String] {
         var imports: [String] = []
@@ -365,28 +422,28 @@ struct SwiftParser {
         var inDoubleQuote = false
         var prevWasEscape = false
         var currentLine = ""
-
+        
         func processLine(_ line: String) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             // interesują nas tylko linie rozpoczynające się deklaracją 'case'
             // dopuszczamy także 'case' bezpośrednio (rzadko), lub 'case ' z dalszą treścią
             guard trimmed.hasPrefix("case ") || trimmed == "case" else { return }
-
+            
             // Usuń słowo "case" i przetwórz resztę
             let afterCase = String(trimmed.dropFirst(min(4, trimmed.count))).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !afterCase.isEmpty else { return }
-
+            
             // Podziel listę przypadków top-level (mogą być oddzielone przecinkami)
             let items = splitTopLevel(afterCase, separator: ",")
             for item in items {
                 let it = item.trimmingCharacters(in: .whitespacesAndNewlines)
                 if it.isEmpty { continue }
-
+                
                 var name = it
                 var params: [EnumParameter]? = nil
                 var rawValue: String? = nil
-
+                
                 // top-level '=' -> raw value
                 let rawSplit = splitTopLevel(it, separator: "=")
                 if rawSplit.count >= 2 {
@@ -395,7 +452,7 @@ struct SwiftParser {
                         .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                     name = rawSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-
+                
                 // payload parameters: name(params)
                 if let openIdx = name.firstIndex(of: "("),
                    let closeIdx = name.lastIndex(of: ")"),
@@ -405,11 +462,11 @@ struct SwiftParser {
                     params = parsedParams.isEmpty ? nil : parsedParams
                     name = String(name[..<openIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-
+                
                 cases.append(EnumCase(name: name, rawValue: rawValue, params: params))
             }
         }
-
+        
         for ch in body {
             if ch == "\\" {
                 prevWasEscape.toggle()
@@ -430,7 +487,7 @@ struct SwiftParser {
                 }
             }
             prevWasEscape = false
-
+            
             if ch == "\n" || ch == "\r" {
                 if depth == 0 {
                     processLine(currentLine)
@@ -444,7 +501,7 @@ struct SwiftParser {
         if !currentLine.isEmpty && depth == 0 {
             processLine(currentLine)
         }
-
+        
         return cases
     }
     

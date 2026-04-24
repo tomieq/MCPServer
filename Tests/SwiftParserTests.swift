@@ -55,6 +55,41 @@ final class SwiftParserTests: XCTestCase {
         XCTAssertNil(obj?.functions)
     }
     
+    func test_genericClass() throws {
+        let src = """
+        public struct Response<T:Codable>: Codable {
+            public let value: T?
+            public let errorCode : CustomError?
+
+            public init(from decoder: Decoder) throws {
+            }
+
+            public func encode(to encoder: Encoder) throws {
+            }
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = file.objects.first
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj, ObjectDefinition(objectType: .struct,
+                                             name: "Response<T:Codable>",
+                                             modifiers: [.public],
+                                             inheritsFrom: "Codable",
+                                             whereClause: nil,
+                                             functions: [
+                                                ObjectMethod(name: "encode",
+                                                             modifiers: [.public],
+                                                             params: [
+                                                                FunctionParameter(name: "encoder",
+                                                                                  label: "to",
+                                                                                  type: "Encoder")
+                                                             ],
+                                                             returnType: "Void",
+                                                             canThrow: true)
+                                             ],
+                                             cases: nil))
+    }
+    
     func test_simple_enum() throws {
         let src = """
         enum Endpoint {

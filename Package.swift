@@ -28,6 +28,8 @@ let package = Package(
                 .product(name: "FileMonitor", package: "FileMonitor")
             ]
         ),
+        .testTarget(name: "MCPServerTests",
+                   dependencies: ["MCPServer"])
     ],
     swiftLanguageModes: [.v5]
 )
