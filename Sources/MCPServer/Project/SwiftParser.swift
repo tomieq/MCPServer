@@ -179,38 +179,113 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
     return nil
 }
 
+    private static func findClosingDelimiter(in ns: NSString, startingAt location: Int, openChar: unichar, closeChar: unichar) -> Int? {
+        let length = ns.length
+        guard location < length else { return nil }
+        var depth = 0
+        var i = location
+        while i < length {
+            let ch = ns.character(at: i)
+            if ch == openChar { depth += 1 }
+            else if ch == closeChar {
+                depth -= 1
+                if depth == 0 { return i }
+            }
+            i += 1
+        }
+        return nil
+    }
+
     private static func harvestMethods(from body: String) -> [ObjectMethod] {
         var methods: [ObjectMethod] = []
-        let methodPattern = "([^\\{]*?)\\bfunc\\s+([^\\(]*?)([a-z][a-zA-Z0-9_]+(?:<[^>]*>)?)\\s*\\(([^)]*)\\)([^{\\n\\r]*)"
-        
-        guard let regex = try? NSRegularExpression(pattern: methodPattern) else { return [] }
-        let range = NSRange(location: 0, length: body.utf16.count)
-        
-        for result in regex.matches(in: body, options: [], range: range) {
-            let preFunc = (body as NSString).substring(with: result.range(at: 1))
-            let postFunc = (body as NSString).substring(with: result.range(at: 2))
-            
-            let allModStrings = (preFunc + " " + postFunc)
+        let ns = body as NSString
+        let fullLength = ns.length
+
+        guard let funcRegex = try? NSRegularExpression(pattern: "\\bfunc\\b", options: []) else { return [] }
+        let matches = funcRegex.matches(in: body, options: [], range: NSRange(location: 0, length: fullLength))
+
+        for match in matches {
+            let funcPos = match.range.location
+            let funcEnd = funcPos + match.range.length
+
+            // Find the next opening parenthesis '(' for parameters
+            let searchRangeForParen = NSRange(location: funcEnd, length: fullLength - funcEnd)
+            let parenRange = ns.range(of: "(", options: [], range: searchRangeForParen)
+            guard parenRange.location != NSNotFound else { continue }
+
+            // Find matching closing parenthesis
+            guard let closingParenIndex = findClosingDelimiter(in: ns, startingAt: parenRange.location, openChar: unichar(("(" as Character).unicodeScalars.first!.value), closeChar: unichar((")" as Character).unicodeScalars.first!.value)) else { continue }
+
+            // Extract name + possible generics between func and '('
+            let nameRange = NSRange(location: funcEnd, length: parenRange.location - funcEnd)
+            var nameAndGeneric = (ns.substring(with: nameRange)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if nameAndGeneric.isEmpty { continue }
+
+            // Determine method name: take up to first whitespace (keeps generics attached)
+            let nameTokens = nameAndGeneric.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            let name = nameTokens.first ?? nameAndGeneric
+
+            // Extract parameters string (content between parentheses)
+            let paramsContentRange = NSRange(location: parenRange.location + 1, length: closingParenIndex - (parenRange.location + 1))
+            let paramsString = ns.substring(with: paramsContentRange)
+            let parameters = parseParameters(paramsString)
+
+            // Determine modifiers: look backwards from funcPos to start of line (or start of body)
+            var lineStart = funcPos
+            while lineStart > 0 {
+                let ch = ns.character(at: lineStart - 1)
+                if ch == 10 || ch == 13 || ch == 123 || ch == 125 { // newline or brace
+                    break
+                }
+                lineStart -= 1
+            }
+            let preFuncRange = NSRange(location: lineStart, length: funcPos - lineStart)
+            let preFunc = (preFuncRange.length > 0) ? ns.substring(with: preFuncRange) : ""
+            let preTokens = (preFunc + " ")
                 .components(separatedBy: .whitespacesAndNewlines)
                 .filter { !$0.isEmpty }
-            
-            let modifiers = allModStrings.compactMap { MethodModifier(rawValue: $0) }
-            let name = (body as NSString).substring(with: result.range(at: 3))
-            let paramsString = (body as NSString).substring(with: result.range(at: 4))
-            let parameters = parseParameters(paramsString)
-            let signatureSuffix = (body as NSString).substring(with: result.range(at: 5))
-            
-            let canThrow = signatureSuffix.contains("throws")
+            let modifiers = preTokens.compactMap { MethodModifier(rawValue: $0) }
+
+            // Extract signature suffix (from after closing paren up to next '{' or end-of-body or ';')
+            let suffixSearchStart = closingParenIndex + 1
+            var suffixEnd = fullLength
+            if suffixSearchStart < fullLength {
+                // Try to find the next opening brace '{' for function body
+                let searchRangeForBrace = NSRange(location: suffixSearchStart, length: fullLength - suffixSearchStart)
+                let braceRange = ns.range(of: "{", options: [], range: searchRangeForBrace)
+                if braceRange.location != NSNotFound {
+                    suffixEnd = braceRange.location
+                } else {
+                    // fallback: end of line
+                    if let nlRange = ns.substring(from: suffixSearchStart).rangeOfCharacter(from: CharacterSet.newlines) {
+                        let idx = ns.substring(from: suffixSearchStart).distance(from: ns.substring(from: suffixSearchStart).startIndex, to: nlRange.lowerBound)
+                        suffixEnd = suffixSearchStart + idx
+                    }
+                }
+            }
+            let suffixRange = NSRange(location: suffixSearchStart, length: max(0, suffixEnd - suffixSearchStart))
+            let signatureSuffix = (suffixRange.length > 0) ? ns.substring(with: suffixRange) : ""
+
+            // Detect throws/rethrows and async
+            let canThrow = signatureSuffix.contains("throws") || signatureSuffix.contains("rethrows")
+            // Determine return type
             var returnType = "Void"
             if let arrowRange = signatureSuffix.range(of: "->") {
-                let afterArrow = signatureSuffix[arrowRange.upperBound...]
-                let cleanReturn = afterArrow.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .components(separatedBy: "{")[0]
-                    .components(separatedBy: ";")[0]
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                returnType = cleanReturn.isEmpty ? "Void" : String(cleanReturn)
+                let afterArrow = signatureSuffix[arrowRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                // cut off at first occurrence of these delimiters/keywords
+                let delimiters = [" where ", " throws", " rethrows", " async", "{", ";", "\n", "\r"]
+                var cutIndex = afterArrow.endIndex
+                for d in delimiters {
+                    if let r = afterArrow.range(of: d) {
+                        if r.lowerBound < cutIndex { cutIndex = r.lowerBound }
+                    }
+                }
+                let extracted = afterArrow[..<cutIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !extracted.isEmpty {
+                    returnType = String(extracted)
+                }
             }
-            
+
             methods.append(ObjectMethod(
                 name: name,
                 modifiers: modifiers.isEmpty ? nil : modifiers,
@@ -219,6 +294,7 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 canThrow: canThrow
             ))
         }
+
         return methods
     }
 
