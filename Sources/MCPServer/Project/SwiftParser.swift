@@ -46,6 +46,7 @@ struct ObjectDefinition: Equatable, Hashable, Codable {
 // MARK: - Parser
 struct SwiftParser {
     static func getObjectTypes(fileContent txt: String) -> [ObjectDefinition] {
+        let txt  = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
