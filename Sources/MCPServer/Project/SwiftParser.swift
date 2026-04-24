@@ -1,5 +1,5 @@
 //
-//  ObjectTypeHarvester.swift
+//  SwiftParser.swift
 //  MCPServer
 // 
 //  Created by: tomieq on 24/04/2026
@@ -35,31 +35,25 @@ struct ObjectMethod: Equatable, Hashable, Codable {
     let isThrowable: Bool
 }
 
-struct NamedType: Equatable, Hashable, Codable {
+struct ObjectDefinition: Equatable, Hashable, Codable {
     let objectType: ObjectType
     let name: String
-    let modifiers: [ObjectTypeModifier]
+    let modifiers: [ObjectTypeModifier]?
     let inheritsFrom: String?
-    let functions: [ObjectMethod]
+    let functions: [ObjectMethod]?
     
-    var isPublic: Bool {
-        self.modifiers.contains(.public)
-    }
-}
-
-extension NamedType: CustomStringConvertible {
-    var description: String {
-        "\(self.objectType) \(self.name) [Functions: \(functions.count)]"
-    }
+//    var isPublic: Bool {
+//        self.modifiers.contains(.public)
+//    }
 }
 
 // MARK: - Parser
 
-struct ObjectTypeHarvester {
-    private static let logger = Logger(ObjectTypeHarvester.self)
+struct SwiftParser {
+    private static let logger = Logger(SwiftParser.self)
     
-    static func getObjectTypes(fileContent txt: String) -> [NamedType] {
-        var foundTypes: [NamedType] = []
+    static func getObjectTypes(fileContent txt: String) -> [ObjectDefinition] {
+        var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
         
@@ -88,17 +82,17 @@ struct ObjectTypeHarvester {
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
                     let functions = harvestMethods(from: bodyContent)
                     
-                    foundTypes.append(NamedType(
+                    definitions.append(ObjectDefinition(
                         objectType: objectType,
                         name: name,
-                        modifiers: usedModifiers,
+                        modifiers: usedModifiers.isEmpty ? nil : usedModifiers,
                         inheritsFrom: inheritsFrom,
-                        functions: functions
+                        functions: functions.isEmpty ? nil : functions
                     ))
                 }
             }
         }
-        return foundTypes
+        return definitions
     }
     
     private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
