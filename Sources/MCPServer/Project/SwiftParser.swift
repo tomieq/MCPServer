@@ -85,10 +85,10 @@ struct SwiftParser {
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
 
         for objectType in ObjectType.allCases {
-            let flavorName = objectType.rawValue
+            let rawObjectType = objectType.rawValue
             // Pattern: optional modifiers, keyword (class/enum/...), then capture name (anything up to ":" or "{" or newline)
             // We allow backticks and generics inside the captured name; we'll trim " where ..." out of the name later.
-            let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(flavorName)\\b\\s+([^\\{\\n\\r:]+)(?:\\s*:\\s*([^\\{]*))?"
+            let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(rawObjectType)\\b\\s+([^\\{\\n\\r:]+)(?:\\s*:\\s*([^\\{]*))?"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
 
             for result in regex.matches(in: txt, options: [], range: range) {
@@ -116,7 +116,7 @@ struct SwiftParser {
                 // Extract modifiers that appear before the keyword (take the substring from start of match up to flavorName)
                 let fullMatchRange = result.range
                 let fullMatchingString = (txt as NSString).substring(with: fullMatchRange)
-                let beforeKeyword = fullMatchingString.components(separatedBy: flavorName)[0]
+                let beforeKeyword = fullMatchingString.components(separatedBy: rawObjectType)[0]
                 let usedModifiers = beforeKeyword
                     .components(separatedBy: .whitespacesAndNewlines)
                     .filter { !$0.isEmpty }
