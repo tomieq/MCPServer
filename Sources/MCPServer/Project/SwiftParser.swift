@@ -15,6 +15,7 @@ enum ObjectType: String, CaseIterable, Codable {
 
 enum ObjectTypeModifier: String, CaseIterable, Codable {
     case final, `public`, `internal`, `private`, `fileprivate`
+    case open, indirect, dynamic
 }
 
 enum MethodModifier: String, CaseIterable, Codable {
@@ -74,49 +75,73 @@ struct SwiftParser {
                          imports: imports.isEmpty ? nil : imports)
     }
     
+    // Replace the parseObjecsTypes(...) method with this updated implementation
     static func parseObjecsTypes(fileContent txt: String, config: ParserConfig) -> [ObjectDefinition] {
         let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
-        
+
+        // join modifiers into alternation: "final|public|..."
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
-        
+
         for objectType in ObjectType.allCases {
             let flavorName = objectType.rawValue
-            let pattern = "(\(modifiersPattern)|\\s)*\\s\(flavorName)\\s([A-Z][a-zA-Z0-9_]+)(\\s*:\\s*([^\\{]*))?"
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            
+            // Pattern: optional modifiers, keyword (class/enum/...), then capture name (anything up to ":" or "{" or newline)
+            // We allow backticks and generics inside the captured name; we'll trim " where ..." out of the name later.
+            let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(flavorName)\\b\\s+([^\\{\\n\\r:]+)(?:\\s*:\\s*([^\\{]*))?"
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+
             for result in regex.matches(in: txt, options: [], range: range) {
+                // result.range(at: 1) -> captured name-like portion
+                // result.range(at: 2) -> optional inheritsFrom (after colon)
+                guard result.range(at: 1).location != NSNotFound else { continue }
+                var rawName = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // If name contains a 'where' clause, strip it off (we don't store where-clause in ObjectDefinition)
+                if let whereRange = rawName.range(of: " where ") {
+                    rawName = String(rawName[..<whereRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                // Remove surrounding backticks if present
+                rawName = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "`")).trimmingCharacters(in: .whitespacesAndNewlines)
+                if rawName.isEmpty { continue }
+
+                let name = rawName
+
+                var inheritsFrom: String? = nil
+                if result.numberOfRanges >= 3, result.range(at: 2).location != NSNotFound {
+                    inheritsFrom = (txt as NSString).substring(with: result.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if inheritsFrom?.isEmpty == true { inheritsFrom = nil }
+                }
+
+                // Extract modifiers that appear before the keyword (take the substring from start of match up to flavorName)
                 let fullMatchRange = result.range
                 let fullMatchingString = (txt as NSString).substring(with: fullMatchRange)
-                let name = (txt as NSString).substring(with: result.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                var inheritsFrom: String? = nil
-                if result.range(at: 4).location != NSNotFound {
-                    inheritsFrom = (txt as NSString).substring(with: result.range(at: 4)).trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                
-                let usedModifiers = fullMatchingString.components(separatedBy: flavorName)[0]
+                let beforeKeyword = fullMatchingString.components(separatedBy: flavorName)[0]
+                let usedModifiers = beforeKeyword
                     .components(separatedBy: .whitespacesAndNewlines)
+                    .filter { !$0.isEmpty }
                     .compactMap { ObjectTypeModifier(rawValue: $0) }
-                
+
+                // Find body starting location (after the full match) and attempt to find matching brace block
                 let searchStart = fullMatchRange.location + fullMatchRange.length
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
-                    
+
                     let functions: [ObjectMethod]
                     if config.includeFunctions {
                         functions = harvestMethods(from: bodyContent)
                     } else {
                         functions = []
                     }
+
                     let cases: [EnumCase]?
                     if config.includeEnumCases, objectType == .enum {
                         cases = harvestEnumCases(from: bodyContent)
                     } else {
                         cases = nil
                     }
-                    
+
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
                         name: name,
