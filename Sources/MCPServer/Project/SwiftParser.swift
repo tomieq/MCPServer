@@ -1,7 +1,7 @@
 //
 //  SwiftParser.swift
 //  MCPServer
-// 
+//
 //  Created by: tomieq on 24/04/2026
 //
 import Foundation
@@ -29,6 +29,11 @@ struct FunctionParameter: Equatable, Hashable, Codable {
     let type: String
 }
 
+struct EnumParameter: Equatable, Hashable, Codable {
+    let name: String?
+    let type: String
+}
+
 struct ObjectMethod: Equatable, Hashable, Codable {
     let name: String
     let modifiers: [MethodModifier]?
@@ -40,7 +45,7 @@ struct ObjectMethod: Equatable, Hashable, Codable {
 struct EnumCase: Equatable, Hashable, Codable {
     let name: String
     let rawValue: String?
-    let params: [FunctionParameter]?
+    let params: [EnumParameter]?
 }
 
 struct ObjectDefinition: Equatable, Hashable, Codable {
@@ -80,39 +85,39 @@ struct SwiftParser {
         let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
-
+        
         // join modifiers into alternation: "final|public|..."
         let modifiersPattern = ObjectTypeModifier.allCases.map { $0.rawValue }.joined(separator: "|")
-
+        
         for objectType in ObjectType.allCases {
             let rawObjectType = objectType.rawValue
             // Pattern: optional modifiers, keyword (class/enum/...), then capture name (anything up to ":" or "{" or newline)
             // We allow backticks and generics inside the captured name; we'll trim " where ..." out of the name later.
             let pattern = "(?:\\b(?:\(modifiersPattern))\\b|\\s)*\\b\(rawObjectType)\\b\\s+([^\\{\\n\\r:]+)(?:\\s*:\\s*([^\\{]*))?"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
-
+            
             for result in regex.matches(in: txt, options: [], range: range) {
                 // result.range(at: 1) -> captured name-like portion
                 // result.range(at: 2) -> optional inheritsFrom (after colon)
                 guard result.range(at: 1).location != NSNotFound else { continue }
                 var rawName = (txt as NSString).substring(with: result.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-
+                
                 // If name contains a 'where' clause inline (unlikely), strip it off from name
                 if let whereRangeInName = rawName.range(of: "\\bwhere\\b", options: .regularExpression) {
                     rawName = String(rawName[..<whereRangeInName.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-
+                
                 // Remove surrounding backticks if present
                 rawName = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "`")).trimmingCharacters(in: .whitespacesAndNewlines)
                 if rawName.isEmpty { continue }
                 let name = rawName
-
+                
                 var inheritsFrom: String? = nil
                 if result.numberOfRanges >= 3, result.range(at: 2).location != NSNotFound {
                     inheritsFrom = (txt as NSString).substring(with: result.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
                     if inheritsFrom?.isEmpty == true { inheritsFrom = nil }
                 }
-
+                
                 // Extract modifiers that appear before the keyword (take the substring from start of match up to flavorName)
                 let fullMatchRange = result.range
                 let fullMatchingString = (txt as NSString).substring(with: fullMatchRange)
@@ -121,7 +126,7 @@ struct SwiftParser {
                     .components(separatedBy: .whitespacesAndNewlines)
                     .filter { !$0.isEmpty }
                     .compactMap { ObjectTypeModifier(rawValue: $0) }
-
+                
                 // Find body starting location (after the full match) and attempt to find matching brace block
                 let searchStart = fullMatchRange.location + fullMatchRange.length
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
@@ -151,23 +156,23 @@ struct SwiftParser {
                             }
                         }
                     }
-
+                    
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
-
+                    
                     let functions: [ObjectMethod]
                     if config.includeFunctions {
                         functions = harvestMethods(from: bodyContent)
                     } else {
                         functions = []
                     }
-
+                    
                     let cases: [EnumCase]?
                     if config.includeEnumCases, objectType == .enum {
                         cases = harvestEnumCases(from: bodyContent)
                     } else {
                         cases = nil
                     }
-
+                    
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
                         name: name,
@@ -182,7 +187,7 @@ struct SwiftParser {
         }
         return definitions
     }
-
+    
     private static func harvestImports(from txt: String) -> [String] {
         var imports: [String] = []
         // Changed ([a-zA-Z0-9_.,\s]+) to ([a-zA-Z0-9_., ]+)
@@ -205,32 +210,32 @@ struct SwiftParser {
         }
         return imports.unique
     }
-
-private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
-    let ns = txt as NSString
-    let length = ns.length
-    guard location < length else { return nil }
-    let searchRange = NSRange(location: location, length: length - location)
-    let openRange = ns.range(of: "{", options: [], range: searchRange)
-    guard openRange.location != NSNotFound else { return nil }
-
-    let openChar: unichar = 123  // '{'
-    let closeChar: unichar = 125 // '}'
-    var braceCount = 0
-    var i = openRange.location
-    while i < length {
-        let ch = ns.character(at: i)
-        if ch == openChar { braceCount += 1 }
-        else if ch == closeChar { braceCount -= 1 }
-        if braceCount == 0 {
-            let startPos = openRange.location + 1
-            return NSRange(location: startPos, length: i - startPos)
+    
+    private static func findClosingBraceRange(in txt: String, startingAt location: Int) -> NSRange? {
+        let ns = txt as NSString
+        let length = ns.length
+        guard location < length else { return nil }
+        let searchRange = NSRange(location: location, length: length - location)
+        let openRange = ns.range(of: "{", options: [], range: searchRange)
+        guard openRange.location != NSNotFound else { return nil }
+        
+        let openChar: unichar = 123  // '{'
+        let closeChar: unichar = 125 // '}'
+        var braceCount = 0
+        var i = openRange.location
+        while i < length {
+            let ch = ns.character(at: i)
+            if ch == openChar { braceCount += 1 }
+            else if ch == closeChar { braceCount -= 1 }
+            if braceCount == 0 {
+                let startPos = openRange.location + 1
+                return NSRange(location: startPos, length: i - startPos)
+            }
+            i += 1
         }
-        i += 1
+        return nil
     }
-    return nil
-}
-
+    
     private static func findClosingDelimiter(in ns: NSString, startingAt location: Int, openChar: unichar, closeChar: unichar) -> Int? {
         let length = ns.length
         guard location < length else { return nil }
@@ -247,41 +252,41 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
         }
         return nil
     }
-
+    
     private static func harvestMethods(from body: String) -> [ObjectMethod] {
         var methods: [ObjectMethod] = []
         let ns = body as NSString
         let fullLength = ns.length
-
+        
         guard let funcRegex = try? NSRegularExpression(pattern: "\\bfunc\\b", options: []) else { return [] }
         let matches = funcRegex.matches(in: body, options: [], range: NSRange(location: 0, length: fullLength))
-
+        
         for match in matches {
             let funcPos = match.range.location
             let funcEnd = funcPos + match.range.length
-
+            
             // Find the next opening parenthesis '(' for parameters
             let searchRangeForParen = NSRange(location: funcEnd, length: fullLength - funcEnd)
             let parenRange = ns.range(of: "(", options: [], range: searchRangeForParen)
             guard parenRange.location != NSNotFound else { continue }
-
+            
             // Find matching closing parenthesis
             guard let closingParenIndex = findClosingDelimiter(in: ns, startingAt: parenRange.location, openChar: unichar(("(" as Character).unicodeScalars.first!.value), closeChar: unichar((")" as Character).unicodeScalars.first!.value)) else { continue }
-
+            
             // Extract name + possible generics between func and '('
             let nameRange = NSRange(location: funcEnd, length: parenRange.location - funcEnd)
             var nameAndGeneric = (ns.substring(with: nameRange)).trimmingCharacters(in: .whitespacesAndNewlines)
             if nameAndGeneric.isEmpty { continue }
-
+            
             // Determine method name: take up to first whitespace (keeps generics attached)
             let nameTokens = nameAndGeneric.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
             let name = nameTokens.first ?? nameAndGeneric
-
+            
             // Extract parameters string (content between parentheses)
             let paramsContentRange = NSRange(location: parenRange.location + 1, length: closingParenIndex - (parenRange.location + 1))
             let paramsString = ns.substring(with: paramsContentRange)
-            let parameters = parseParameters(paramsString)
-
+            let parameters = parseFunctionParameters(paramsString)
+            
             // Determine modifiers: look backwards from funcPos to start of line (or start of body)
             var lineStart = funcPos
             while lineStart > 0 {
@@ -297,7 +302,7 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 .components(separatedBy: .whitespacesAndNewlines)
                 .filter { !$0.isEmpty }
             let modifiers = preTokens.compactMap { MethodModifier(rawValue: $0) }
-
+            
             // Extract signature suffix (from after closing paren up to next '{' or end-of-body or ';')
             let suffixSearchStart = closingParenIndex + 1
             var suffixEnd = fullLength
@@ -317,7 +322,7 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
             }
             let suffixRange = NSRange(location: suffixSearchStart, length: max(0, suffixEnd - suffixSearchStart))
             let signatureSuffix = (suffixRange.length > 0) ? ns.substring(with: suffixRange) : ""
-
+            
             // Detect throws/rethrows and async
             let canThrow = signatureSuffix.contains("throws") || signatureSuffix.contains("rethrows")
             // Determine return type
@@ -337,7 +342,7 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                     returnType = String(extracted)
                 }
             }
-
+            
             methods.append(ObjectMethod(
                 name: name,
                 modifiers: modifiers.isEmpty ? nil : modifiers,
@@ -346,10 +351,10 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 canThrow: canThrow
             ))
         }
-
+        
         return methods
     }
-
+    
     private static func harvestEnumCases(from body: String) -> [EnumCase] {
         var cases: [EnumCase] = []
         // find "case " occurrences and capture until end of line or '}' — simpler: line-based approach
@@ -370,9 +375,9 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 // name(params) = raw
                 // parse name + params + raw
                 var name = it
-                var params: [FunctionParameter]? = nil
+                var params: [EnumParameter]? = nil
                 var rawValue: String? = nil
-
+                
                 // extract raw value (top-level '=')
                 let rawSplit = splitTopLevel(it, separator: "=")
                 if rawSplit.count >= 2 {
@@ -381,11 +386,11 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                         .trimmingCharacters(in: .init(charactersIn: "\""))
                     name = rawSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-
+                
                 // extract params if present
                 if let openIdx = name.firstIndex(of: "("), let closeIdx = name.lastIndex(of: ")"), openIdx < closeIdx {
                     let paramsStr = String(name[name.index(after: openIdx)..<closeIdx])
-                    let parsedParams = parseParameters(paramsStr)
+                    let parsedParams = parseEnumParameters(paramsStr)
                     params = parsedParams.isEmpty ? nil : parsedParams
                     name = name[..<openIdx].trimmingCharacters(in: .whitespacesAndNewlines)
                 }
@@ -402,7 +407,7 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
         var inSingleQuote = false
         var inDoubleQuote = false
         var prevWasEscape = false
-
+        
         for ch in s {
             if ch == "\\" {
                 prevWasEscape.toggle()
@@ -433,45 +438,45 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
         if !current.isEmpty { parts.append(current) }
         return parts
     }
-
-    private static func parseParameters(_ paramsString: String) -> [FunctionParameter] {
+    
+    private static func parseFunctionParameters(_ paramsString: String) -> [FunctionParameter] {
         let trimmed = paramsString.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return [] }
-
+        
         let rawParts = splitTopLevel(trimmed, separator: ",")
         var result: [FunctionParameter] = []
-
+        
         for rawPart in rawParts {
             let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !part.isEmpty else { continue }
-
+            
             // Split on top-level ':' to determine if there is a name/label part.
             let colonSplit = splitTopLevel(part, separator: ":")
-
+            
             if colonSplit.count == 1 {
                 // No top-level colon -> this is a type-only parameter (e.g. enum case: b(Int))
                 let typeOnly = part.trimmingCharacters(in: .whitespacesAndNewlines)
-                // Use '_' as a placeholder name, label nil (tests don't assert the name for such cases)
+                // Use '_' as a placeholder name, label nil (tests/consumer code may expect placeholder)
                 result.append(FunctionParameter(name: "_", label: nil, type: typeOnly))
                 continue
             }
-
+            
             // There is a top-level colon: first piece is the name part, rest combined is the type (may contain additional ':' inside generics etc)
             let namePart = colonSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
             let typePartJoined = colonSplit.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
-
+            
             // Remove default value if present by splitting on top-level '='
             let eqSplit = splitTopLevel(typePartJoined, separator: "=")
             let typePart = eqSplit.first!.trimmingCharacters(in: .whitespacesAndNewlines)
-
+            
             // Parse name/label tokens (externalLabel internalName) or just internalName
             let nameTokens = namePart
                 .split(separator: " ", omittingEmptySubsequences: true)
                 .map { String($0) }
-
+            
             var label: String? = nil
             var name: String
-
+            
             if nameTokens.count == 1 {
                 name = nameTokens[0]
                 // single token -> no explicit external label provided; keep label nil
@@ -481,10 +486,62 @@ private static func findClosingBraceRange(in txt: String, startingAt location: I
                 name = nameTokens.last ?? nameTokens.joined()
                 if label == "_" { label = nil }
             }
-
+            
             result.append(FunctionParameter(name: name, label: label, type: typePart))
         }
-
+        
         return result
     }
+    
+    private static func parseEnumParameters(_ paramsString: String) -> [EnumParameter] {
+        let trimmed = paramsString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return [] }
+        
+        let rawParts = splitTopLevel(trimmed, separator: ",")
+        var result: [EnumParameter] = []
+        
+        for rawPart in rawParts {
+            let part = rawPart.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !part.isEmpty else { continue }
+            
+            // Split on top-level ':' to determine if there is a name part.
+            let colonSplit = splitTopLevel(part, separator: ":")
+            
+            if colonSplit.count == 1 {
+                // No top-level colon -> this is a type-only parameter (e.g. .case(Int, String))
+                let typeOnly = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                result.append(EnumParameter(name: nil, type: typeOnly))
+                continue
+            }
+            
+            // There is a top-level colon: first piece is the name part, rest combined is the type
+            let namePart = colonSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let typePartJoined = colonSplit.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Remove default value if present by splitting on top-level '=' (rare in enum payloads)
+            let eqSplit = splitTopLevel(typePartJoined, separator: "=")
+            let typePart = eqSplit.first!.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // namePart could be "label name" or just "name"
+            let nameTokens = namePart
+                .split(separator: " ", omittingEmptySubsequences: true)
+                .map { String($0) }
+            
+            var name: String? = nil
+            if nameTokens.isEmpty {
+                name = nil
+            } else if nameTokens.count == 1 {
+                name = (nameTokens[0] == "_") ? nil : nameTokens[0]
+            } else {
+                // take the internal name (last token), ignore external label for enum parameters
+                let last = nameTokens.last!
+                name = (last == "_") ? nil : last
+            }
+            
+            result.append(EnumParameter(name: name, type: typePart))
+        }
+        
+        return result
+    }
+    
 }
