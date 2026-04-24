@@ -107,19 +107,15 @@ struct SwiftParser {
     private static func harvestMethods(from body: String) -> [ObjectMethod] {
         var methods: [ObjectMethod] = []
         
-        // NOWY REGEX:
-        // Grupa 1: Wszystko przed 'func' (modyfikatory, atrybuty)
-        // Grupa 2: Wszystko między 'func' a nazwą (np. 'class', 'static')
-        // Grupa 3: Nazwa funkcji z generykami
-        // Grupa 4: Parametry
-        // Grupa 5: Reszta (throws, return type)
-        let methodPattern = "([^\\{]*?)\\bfunc\\s+([^\\(]*?)([a-z][a-zA-Z0-9_]+(?:<[^>]*>)?)\\s*\\(([^)]*)\\)([^{]*)"
+        // MODIFIED REGEX:
+        // Group 5 ([^{ \n\r]*[^{\n\r]*) now stops at the first newline or open brace
+        // to prevent consuming subsequent property declarations in protocols.
+        let methodPattern = "([^\\{]*?)\\bfunc\\s+([^\\(]*?)([a-z][a-zA-Z0-9_]+(?:<[^>]*>)?)\\s*\\(([^)]*)\\)([^{\\n\\r]*)"
         
         guard let regex = try? NSRegularExpression(pattern: methodPattern) else { return [] }
         let range = NSRange(location: 0, length: body.utf16.count)
         
         for result in regex.matches(in: body, options: [], range: range) {
-            // Pobieramy modyfikatory z obu części: przed 'func' i po 'func'
             let preFunc = (body as NSString).substring(with: result.range(at: 1))
             let postFunc = (body as NSString).substring(with: result.range(at: 2))
             
@@ -132,6 +128,8 @@ struct SwiftParser {
             let name = (body as NSString).substring(with: result.range(at: 3))
             let paramsString = (body as NSString).substring(with: result.range(at: 4))
             let parameters = parseParameters(paramsString)
+            
+            // This now contains only the line containing the signature
             let signatureSuffix = (body as NSString).substring(with: result.range(at: 5))
             
             let isThrowable = signatureSuffix.contains("throws")
@@ -139,7 +137,8 @@ struct SwiftParser {
             if let arrowRange = signatureSuffix.range(of: "->") {
                 let afterArrow = signatureSuffix[arrowRange.upperBound...]
                 let cleanReturn = afterArrow.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .components(separatedBy: "{")[0] // zabezpieczenie
+                    .components(separatedBy: "{")[0]
+                    .components(separatedBy: ";")[0] // Also split by semicolon for safety
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 returnType = cleanReturn.isEmpty ? "Void" : String(cleanReturn)
             }
