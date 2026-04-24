@@ -48,6 +48,11 @@ struct EnumCase: Equatable, Hashable, Codable {
     let params: [EnumParameter]?
 }
 
+struct ObjectVariable: Equatable, Hashable, Codable {
+    let name: String
+    let type: String?
+}
+
 struct ObjectDefinition: Equatable, Hashable, Codable {
     let objectType: ObjectType
     let name: String
@@ -55,6 +60,7 @@ struct ObjectDefinition: Equatable, Hashable, Codable {
     let inheritsFrom: String?
     let whereClause: String?
     let functions: [ObjectMethod]?
+    let variables: [ObjectVariable]?
     let cases: [EnumCase]?
     let objects: [ObjectDefinition]?
 }
@@ -67,10 +73,14 @@ struct SwiftFile: Equatable, Hashable, Codable {
 struct ParserConfig {
     let includeFunctions: Bool
     let includeEnumCases: Bool
+    let includeVariables: Bool
     
-    init(includeFunctions: Bool = true, includeEnumCases: Bool = true) {
+    init(includeFunctions: Bool = true,
+         includeEnumCases: Bool = true,
+         includeVariables: Bool = true) {
         self.includeFunctions = includeFunctions
         self.includeEnumCases = includeEnumCases
+        self.includeVariables = includeVariables
     }
 }
 // MARK: - Parser
@@ -239,6 +249,11 @@ struct SwiftParser {
                     } else {
                         cases = nil
                     }
+                    var variables: [ObjectVariable] = []
+                    if config.includeVariables {
+                        variables = harvestVariables(from: bodyContent)
+                    }
+                    
                     let nestedObjects = Self.parseObjecsTypes(fileContent: bodyContent, config: config)
                     
                     definitions.append(ObjectDefinition(
@@ -248,6 +263,7 @@ struct SwiftParser {
                         inheritsFrom: inheritsFrom,
                         whereClause: whereClause,
                         functions: functions.isEmpty ? nil : functions,
+                        variables: variables.isEmpty ? nil : variables,
                         cases: cases?.isEmpty == false ? cases : nil,
                         objects: nestedObjects.isEmpty ? nil : nestedObjects
                     ))
@@ -277,12 +293,15 @@ struct SwiftParser {
                 } else if ch == "'" && !inDoubleQuote {
                     inSingleQuote.toggle()
                 } else if !inSingleQuote && !inDoubleQuote {
+                    // IMPORTANT: check separator before push/pop of bracket characters,
+                    // so separators that are also bracket chars (like '{') are reported.
+                    if ch == separator && stack.isEmpty {
+                        return i
+                    }
                     if ch == "(" || ch == "[" || ch == "{" || ch == "<" {
                         stack.append(ch)
                     } else if ch == ")" || ch == "]" || ch == "}" || ch == ">" {
                         if !stack.isEmpty { stack.removeLast() }
-                    } else if ch == separator && stack.isEmpty {
-                        return i
                     }
                 }
             }
@@ -697,4 +716,158 @@ struct SwiftParser {
         return result
     }
     
+    private static func harvestVariables(from body: String) -> [ObjectVariable] {
+        var vars: [ObjectVariable] = []
+        var depth = 0
+        var inSingleQuote = false
+        var inDoubleQuote = false
+        var prevWasEscape = false
+        var currentLine = ""
+        
+        func processLine(_ line: String) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            // Tokenize by whitespace to find 'let'/'var' and any preceding tokens (possible modifiers)
+            let tokens = trimmed
+                .components(separatedBy: .whitespaces)
+                .filter { !$0.isEmpty }
+            var keywordIndex: Int? = nil
+            for (i, t) in tokens.enumerated() {
+                if t == "let" || t == "var" {
+                    keywordIndex = i
+                    break
+                }
+            }
+            guard let kIdx = keywordIndex else { return }
+            
+            // If there are tokens before the keyword that look like modifiers, skip the line.
+            if kIdx > 0 {
+                let preTokens = Array(tokens[0..<kIdx])
+                var hasModifier = false
+                for pre in preTokens {
+                    let stripped = pre.trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.symbols))
+                    if ObjectTypeModifier(rawValue: stripped) != nil {
+                        hasModifier = true
+                        break
+                    }
+                    for mod in ObjectTypeModifier.allCases {
+                        if stripped.hasPrefix(mod.rawValue) {
+                            hasModifier = true
+                            break
+                        }
+                    }
+                    if hasModifier { break }
+                }
+                if hasModifier { return }
+            }
+            
+            // find position of keyword in the original trimmed string to extract remainder accurately
+            guard let kwRange = trimmed.range(of: tokens[kIdx]) else { return }
+            let afterKeyword = String(trimmed[kwRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !afterKeyword.isEmpty else { return }
+            
+            // Split top-level by commas to get declarations within this single let/var statement
+            let rawDecls = splitTopLevel(afterKeyword, separator: ",")
+            if rawDecls.isEmpty { return }
+            
+            struct ParsedDecl {
+                var namePart: String
+                var typePart: String?  // nil if none present in this decl
+            }
+            var parsed: [ParsedDecl] = []
+            
+            for raw in rawDecls {
+                let d = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if d.isEmpty { continue }
+                if d.first == "(" { continue } // ignore tuple/destructuring
+                
+                // Split on top-level ':' to see if this declarator contains a type annotation
+                let colonSplit = splitTopLevel(d, separator: ":")
+                if colonSplit.count >= 2 {
+                    let namePart = colonSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let rest = colonSplit.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespacesAndNewlines)
+                    // remove initializer if present (top-level '=')
+                    let eqSplit = splitTopLevel(rest, separator: "=")
+                    let typePart = eqSplit.first!.trimmingCharacters(in: .whitespacesAndNewlines)
+                    parsed.append(ParsedDecl(namePart: namePart, typePart: typePart.isEmpty ? nil : typePart))
+                } else {
+                    // no colon here; maybe has initializer "x = ..." or just a name
+                    let eqSplit = splitTopLevel(d, separator: "=")
+                    let namePart = eqSplit[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    parsed.append(ParsedDecl(namePart: namePart, typePart: nil))
+                }
+            }
+            
+            // Propagate type annotations backwards: "a, b: Int" -> a gets Int
+            var currentType: String? = nil
+            for idx in stride(from: parsed.count - 1, through: 0, by: -1) {
+                if let tp = parsed[idx].typePart, !tp.isEmpty {
+                    currentType = tp
+                } else if let cur = currentType {
+                    parsed[idx].typePart = cur
+                }
+            }
+            
+            // Convert parsed declarations into ObjectVariable entries
+            for p in parsed {
+                let namePart = p.namePart.trimmingCharacters(in: .whitespacesAndNewlines)
+                let nameTokens = namePart
+                    .components(separatedBy: .whitespacesAndNewlines)
+                    .filter { !$0.isEmpty }
+                guard let rawName = nameTokens.last else { continue }
+                if rawName.contains("(") || rawName.contains("[") || rawName.contains("{") { continue }
+                let name = rawName.trimmingCharacters(in: CharacterSet(charactersIn: ":,;"))
+                
+                // Clean up type: if it contains a top-level '{' (computed property body), strip from there.
+                var finalType: String?
+                if let tp = p.typePart {
+                    let tpTrim = tp.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let braceIdx = topLevelIndex(of: "{", in: tpTrim) {
+                        let beforeBrace = String(tpTrim[..<braceIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        finalType = beforeBrace.isEmpty ? nil : beforeBrace
+                    } else {
+                        finalType = tpTrim.isEmpty ? nil : tpTrim
+                    }
+                }
+                
+                vars.append(ObjectVariable(name: name, type: finalType))
+            }
+        }
+        
+        for ch in body {
+            if ch == "\\" {
+                prevWasEscape.toggle()
+                currentLine.append(ch)
+                continue
+            }
+            if !prevWasEscape {
+                if ch == "\"" && !inSingleQuote {
+                    inDoubleQuote.toggle()
+                } else if ch == "'" && !inDoubleQuote {
+                    inSingleQuote.toggle()
+                } else if !inSingleQuote && !inDoubleQuote {
+                    if ch == "{" {
+                        depth += 1
+                    } else if ch == "}" {
+                        depth = max(0, depth - 1)
+                    }
+                }
+            }
+            prevWasEscape = false
+            
+            if ch == "\n" || ch == "\r" || ch == ";" {
+                if depth == 0 {
+                    processLine(currentLine)
+                }
+                currentLine = ""
+            } else {
+                currentLine.append(ch)
+            }
+        }
+        if !currentLine.isEmpty && depth == 0 {
+            processLine(currentLine)
+        }
+        
+        return vars
+    }
 }

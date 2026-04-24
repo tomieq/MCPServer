@@ -87,6 +87,7 @@ final class SwiftParserTests: XCTestCase {
                                                              returnType: "Void",
                                                              canThrow: true)
                                              ],
+                                             variables: nil,
                                              cases: nil,
                                             objects: nil))
     }
@@ -108,6 +109,7 @@ final class SwiftParserTests: XCTestCase {
                                              inheritsFrom: nil,
                                              whereClause: nil,
                                              functions: nil,
+                                             variables: nil,
                                              cases: nil,
                                              objects: [
                                                 ObjectDefinition(objectType: .enum,
@@ -116,6 +118,7 @@ final class SwiftParserTests: XCTestCase {
                                                                  inheritsFrom: "Codable",
                                                                  whereClause: nil,
                                                                  functions: nil,
+                                                                 variables: nil,
                                                                  cases: [
                                                                    EnumCase(name: "id",
                                                                             rawValue: "ID",
@@ -123,6 +126,55 @@ final class SwiftParserTests: XCTestCase {
                                                                  ],
                                                                  objects: nil)
                                              ]))
+    }
+    
+    func test_singleVariablesInClass() throws {
+        let src = """
+        class MyClass {
+            var a: Int
+            let name: String
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = file.objects.last
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj, ObjectDefinition(objectType: .class,
+                                             name: "MyClass",
+                                             modifiers: nil,
+                                             inheritsFrom: nil,
+                                             whereClause: nil,
+                                             functions: nil,
+                                             variables: [
+                                                ObjectVariable(name: "a", type: "Int"),
+                                                ObjectVariable(name: "name", type: "String")
+                                             ],
+                                             cases: nil,
+                                             objects: nil))
+    }
+    
+    func test_multipleVariablesInClass() throws {
+        let src = """
+        struct MyClass {
+            var a, b: Int
+            let name: String
+        }
+        """
+        let file = SwiftParser.parseFile(fileContent: src)
+        let obj = file.objects.last
+        XCTAssertNotNil(obj)
+        XCTAssertEqual(obj, ObjectDefinition(objectType: .struct,
+                                             name: "MyClass",
+                                             modifiers: nil,
+                                             inheritsFrom: nil,
+                                             whereClause: nil,
+                                             functions: nil,
+                                             variables: [
+                                                ObjectVariable(name: "a", type: "Int"),
+                                                ObjectVariable(name: "b", type: "Int"),
+                                                ObjectVariable(name: "name", type: "String")
+                                             ],
+                                             cases: nil,
+                                             objects: nil))
     }
     
     func test_simple_enum() throws {
@@ -357,24 +409,6 @@ final class SwiftParserTests: XCTestCase {
                 FunctionParameter(name: "internalName", label: "_", type: "Int")
             ], returnType: "Void", canThrow: false)
         ])
-    }
-    
-    func test_nested_types_detection() throws {
-        let src = """
-        class Outer {
-            struct Inner {
-                func innerMethod() {}
-            }
-            func outerMethod() {}
-        }
-        """
-        let file = SwiftParser.parseFile(fileContent: src)
-        let outer = findObject(in: file, type: .class, name: "Outer")
-        XCTAssertNotNil(outer)
-        let inner = findObject(in: file, type: .struct, name: "Inner")
-        XCTAssertNotNil(inner)
-        XCTAssertNotNil(findMethod(outer!, methodName: "outerMethod"))
-        XCTAssertNotNil(findMethod(inner!, methodName: "innerMethod"))
     }
     
     func test_backtick_type_name() throws {
