@@ -18,7 +18,7 @@ enum ObjectTypeModifier: String, CaseIterable, Codable {
 }
 
 enum MethodModifier: String, CaseIterable, Codable {
-    case `public`, `internal`, `private`, `fileprivate`, `static`, `override`, `@objc`
+    case `public`, `internal`, `private`, `fileprivate`, `static`, `override`, `@objc`, `nonisolated`
 }
 
 struct FunctionParameter: Equatable, Hashable, Codable {
@@ -29,8 +29,8 @@ struct FunctionParameter: Equatable, Hashable, Codable {
 
 struct ObjectMethod: Equatable, Hashable, Codable {
     let name: String
-    let modifiers: [MethodModifier]
-    let parameters: [FunctionParameter]
+    let modifiers: [MethodModifier]?
+    let parameters: [FunctionParameter]?
     let returnType: String
     let isThrowable: Bool
 }
@@ -120,10 +120,14 @@ struct SwiftParser {
         
         // ZMODYFIKOWANY REGEX:
         // Grupa 1: Modyfikatory
-        // Grupa 2: Nazwa funkcji
+        // Grupa 2: Nazwa funkcji WRAZ z generykami (np. createUrlRequest<Request: Encodable>)
         // Grupa 3: Parametry
-        // Grupa 4: Cała sekcja po nawiasach (zawiera throws i return type)
-        let methodPattern = "((?:\\s*\(MethodModifier.allCases.map { $0.rawValue }.joined(separator: "|"))\\s*)*)\\s*func\\s+([a-z][a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)([^{]*)"
+        // Grupa 4: Sekcja po nawiasach (throws, return type)
+        
+        // Wyjaśnienie zmiany w Grupie 2: ([a-z][a-zA-Z0-9_]+(?:<[^>]*>)? )
+        // - [a-z][a-zA-Z0-9_]+ : standardowa nazwa
+        // - (?:<[^>]*>)? : nieprzechwytywana grupa, która szuka < czegoś > zero lub jeden raz
+        let methodPattern = "((?:\\s*\(MethodModifier.allCases.map { $0.rawValue }.joined(separator: "|"))\\s*)*)\\s*func\\s+([a-z][a-zA-Z0-9_]+(?:<[^>]*>)?)\\s*\\(([^)]*)\\)([^{]*)"
         
         guard let regex = try? NSRegularExpression(pattern: methodPattern) else { return [] }
         let range = NSRange(location: 0, length: body.utf16.count)
@@ -133,20 +137,18 @@ struct SwiftParser {
             let modifiers = modString.components(separatedBy: .whitespacesAndNewlines)
                 .compactMap { MethodModifier(rawValue: $0) }
             
+            // Tutaj teraz zostanie pobrana nazwa wraz z <Request: Encodable>
             let name = (body as NSString).substring(with: result.range(at: 2))
+            
             let paramsString = (body as NSString).substring(with: result.range(at: 3))
             let parameters = parseParameters(paramsString)
             
-            // Analiza sekcji po nawiasach (np. " throws -> String")
             let signatureSuffix = (body as NSString).substring(with: result.range(at: 4))
-            
             let isThrowable = signatureSuffix.contains("throws")
             
-            // returnType
             var returnType = "Void"
             if let arrowRange = signatureSuffix.range(of: "->") {
                 let afterArrow = signatureSuffix[arrowRange.upperBound...]
-                
                 if let braceIndex = afterArrow.firstIndex(of: "{") {
                     let cleanReturn = afterArrow[..<braceIndex]
                         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -159,13 +161,12 @@ struct SwiftParser {
             
             methods.append(ObjectMethod(
                 name: name,
-                modifiers: modifiers,
-                parameters: parameters,
+                modifiers: modifiers.isEmpty ? nil : modifiers,
+                parameters: parameters.isEmpty ? nil : parameters,
                 returnType: returnType,
                 isThrowable: isThrowable
             ))
         }
-        
         return methods
     }
     
