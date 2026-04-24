@@ -56,16 +56,25 @@ struct SwiftFile: Equatable, Hashable, Codable {
     let imports: [String]?
 }
 
+struct ParserConfig {
+    let includeFunctions: Bool
+    let includeEnumCases: Bool
+    
+    init(includeFunctions: Bool = true, includeEnumCases: Bool = true) {
+        self.includeFunctions = includeFunctions
+        self.includeEnumCases = includeEnumCases
+    }
+}
 // MARK: - Parser
 struct SwiftParser {
     
-    static func parseFile(fileContent txt: String) -> SwiftFile {
+    static func parseFile(fileContent txt: String, config: ParserConfig = ParserConfig()) -> SwiftFile {
         let imports = harvestImports(from: txt)
-        return SwiftFile(objects: Self.parseObjecsTypes(fileContent: txt),
+        return SwiftFile(objects: Self.parseObjecsTypes(fileContent: txt, config: config),
                          imports: imports.isEmpty ? nil : imports)
     }
     
-    static func parseObjecsTypes(fileContent txt: String) -> [ObjectDefinition] {
+    static func parseObjecsTypes(fileContent txt: String, config: ParserConfig) -> [ObjectDefinition] {
         let txt = CommentRemover.removeComments(txt)
         var definitions: [ObjectDefinition] = []
         let range = NSRange(location: 0, length: txt.utf16.count)
@@ -95,8 +104,18 @@ struct SwiftParser {
                 if let bodyRange = findClosingBraceRange(in: txt, startingAt: searchStart) {
                     let bodyContent = (txt as NSString).substring(with: bodyRange)
                     
-                    let functions: [ObjectMethod] = harvestMethods(from: bodyContent)
-                    let cases = objectType == .enum ? harvestEnumCases(from: bodyContent) : nil
+                    let functions: [ObjectMethod]
+                    if config.includeFunctions {
+                        functions = harvestMethods(from: bodyContent)
+                    } else {
+                        functions = []
+                    }
+                    let cases: [EnumCase]?
+                    if config.includeEnumCases, objectType == .enum {
+                        cases = harvestEnumCases(from: bodyContent)
+                    } else {
+                        cases = nil
+                    }
                     
                     definitions.append(ObjectDefinition(
                         objectType: objectType,
