@@ -28,7 +28,7 @@ extension FileItem {
         var files: [FileItem] = []
         for subUrl in try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey]) {
             if url.isDirectory {
-                if let filesInFolder = try? harvest(url: subUrl, extensions: extensions) {
+                if let filesInFolder = try? harvest(url: subUrl, extensions: extensions, excludedFolders: excludedFolders) {
                     files.append(filesInFolder)
                 }
             } else if extensions.contains(subUrl.pathExtension) {
