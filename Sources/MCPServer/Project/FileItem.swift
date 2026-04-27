@@ -12,9 +12,12 @@ indirect enum FileItem: Codable {
 }
 
 extension FileItem {
-    static func harvest(url: URL, extensions: [String], excludedFolders: [String] = []) throws -> FileItem? {
+    static func harvest(url: URL,
+                        extensions: [String],
+                        excludedFolders: [String] = [],
+                        excludedFileNames: [String] = []) throws -> FileItem? {
         guard url.isDirectory else {
-            if extensions.contains(url.pathExtension) {
+            if extensions.contains(url.pathExtension), excludedFileNames.contains(url.lastPathComponent).not {
                 return .file(name: url.lastPathComponent,
                              structure: SwiftParser.parseFile(fileContent: try String(contentsOf: url))
                 )
@@ -28,10 +31,13 @@ extension FileItem {
         var files: [FileItem] = []
         for subUrl in try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey]) {
             if url.isDirectory {
-                if let filesInFolder = try? harvest(url: subUrl, extensions: extensions, excludedFolders: excludedFolders) {
+                if let filesInFolder = try? harvest(url: subUrl,
+                                                    extensions: extensions,
+                                                    excludedFolders: excludedFolders,
+                                                    excludedFileNames: excludedFileNames) {
                     files.append(filesInFolder)
                 }
-            } else if extensions.contains(subUrl.pathExtension) {
+            } else if extensions.contains(subUrl.pathExtension), excludedFileNames.contains(url.lastPathComponent).not {
                 files.append(.file(name: subUrl.lastPathComponent,
                                    structure: SwiftParser.parseFile(fileContent: try String(contentsOf: url))
                                   ))
