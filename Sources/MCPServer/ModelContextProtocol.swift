@@ -9,29 +9,34 @@ import SwiftExtensions
 import Swifter
 import Logger
 
+enum MCPCallError: Error {
+    case toolNotFound
+}
 class ModelContextProtocol {
     private let logger = Logger(ModelContextProtocol.self)
-    let engine: Engine = PetEngine()
+    let engines: [Engine] = [
+        PetEngine(),
+        RandomEngine()
+    ]
     
     func initialize(id: Int) -> MCPResponse<Initialize> {
         let dto = Initialize(protocolVersion: "2025-03-26",
                              serverInfo: .init(name: "SwiftMCP",
                                                version: "1.0.0"),
                              capabilities: .init(tools: .init(listChanged: false)),
-                             instructions: engine.instructions
+                             instructions: engines.map { $0.instructions }.joined(separator: "\n")
         )
         return MCPResponse(id: id, dto)
     }
     
     func list(id: Int) -> MCPResponse<ToolsList> {
-        return MCPResponse(id: id, engine.tools)
+        return MCPResponse(id: id, ToolsList(engines.flatMap { $0.tools }))
     }
     
     func call(id: Int, name: String, body: HttpRequestBody) throws -> MCPResponse<ToolResult> {
-        guard let command = CommandName(rawValue: name) else {
-            logger.e("Unsupported function: \(name)")
-            return MCPResponse(id: id, ToolResult([]))
+        guard let engine = (engines.first{ $0.canHandle(name) }) else {
+            throw MCPCallError.toolNotFound
         }
-        return MCPResponse(id: id, try engine.call(command, body: body))
+        return MCPResponse(id: id, try engine.call(name, body: body))
     }
 }

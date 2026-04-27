@@ -7,12 +7,12 @@
 import Swifter
 import Logger
 
-enum CommandName: String, Codable {
+enum PetCommand: String, Codable {
     case get_pets
     case get_pet_price
 }
 
-extension CommandName: CustomStringConvertible {
+extension PetCommand: CustomStringConvertible {
     var description: String {
         rawValue
     }
@@ -21,28 +21,36 @@ extension CommandName: CustomStringConvertible {
 
 class PetEngine: Engine {
     private let logger = Logger(PetEngine.self)
-    let instructions = "Provides available pets"
+    let instructions = "Provides available pets."
     
-    let tools = ToolsList([
-        .init(command: .get_pets,
+    func command(for rawValue: String) -> PetCommand? {
+        PetCommand(rawValue: rawValue)
+    }
+    
+    func canHandle(_ command: String) -> Bool {
+        self.command(for: command).notNil
+    }
+    let tools: [ToolsList.Schema] = [
+        .init(PetCommand.get_pets,
               description: "Returns an array of objects with all possible pets (petID, kind, name)",
               inputSchema:
                 ToolParameter(type: .object,
                               properties: [:],
                               required: [])
              ),
-        .init(command: .get_pet_price,
+        .init(PetCommand.get_pet_price,
               description: "Returns the price of given pet. Call it for one of the pets from get_pets. If you want prices for many pets, you need to call this multiple times.",
               inputSchema:
                 ToolParameter(type: .object,
                               properties: ["petID": .init(type: .integer, description: "petID of returned from get_pets")],
                               required: ["petID"])
              )
-       ])
+       ]
     
-    
-    
-    func call(_ command: CommandName, body: HttpRequestBody) throws -> ToolResult {
+    func call(_ command: String, body: HttpRequestBody) throws -> ToolResult {
+        guard let command = self.command(for: command) else {
+            return ToolResult([])
+        }
         let dto: ToolResult
         switch command {
         case .get_pets:
@@ -74,7 +82,5 @@ class PetEngine: Engine {
         }
         return dto
     }
-    
-    
 }
 

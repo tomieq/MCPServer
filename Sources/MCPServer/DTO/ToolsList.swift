@@ -14,19 +14,13 @@ struct ToolsList: Codable {
         let description: String
         let inputSchema: ToolParameter
         
-        init(name: String, description: String, inputSchema: ToolParameter) {
+        init(_ name: String, description: String, inputSchema: ToolParameter) {
             self.name = name
             self.description = description
             self.inputSchema = inputSchema
         }
         
-        init(name: CustomStringConvertible, description: String, inputSchema: ToolParameter) {
-            self.name = name.description
-            self.description = description
-            self.inputSchema = inputSchema
-        }
-        
-        init(command name: CommandName, description: String, inputSchema: ToolParameter) {
+        init(_ name: CustomStringConvertible, description: String, inputSchema: ToolParameter) {
             self.name = name.description
             self.description = description
             self.inputSchema = inputSchema
