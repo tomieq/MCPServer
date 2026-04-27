@@ -41,9 +41,9 @@ class RestServer {
                 logger.d("response: \(response.json ?? "nil")")
                 return .ok(.json(response))
             case "tools/call":
-                let response = try mcp.function(id: command.id.or(0),
-                                                name: command.params?.name ?? "",
-                                                body: request.body,
+                let response = try mcp.call(id: command.id.or(0),
+                                            name: command.params?.name ?? "",
+                                            body: request.body,
                 )
                 logger.d(response.json ?? "nil")
                 return .ok(.json(response))

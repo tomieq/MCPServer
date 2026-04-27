@@ -8,7 +8,7 @@ import Foundation
 import Swifter
 import Logger
 
-enum CommandName: String {
+enum CoderCommand: String {
     case list_files
     case find_file
     case read_file
@@ -19,7 +19,7 @@ enum CommandName: String {
     case find_text_in_files
 }
 
-extension CommandName: CustomStringConvertible {
+extension CoderCommand: CustomStringConvertible {
     var description: String {
         rawValue
     }
@@ -37,16 +37,24 @@ class CoderEngine: Engine {
 
     let instructions = "This tool can list and search all files in the project, read and write their content, and more."
     
-    let tools = ToolsList([
+    func command(for rawValue: String) -> CoderCommand? {
+        CoderCommand(rawValue: rawValue)
+    }
+    
+    func canHandle(_ command: String) -> Bool {
+        self.command(for: command).notNil
+    }
+    
+    let tools: [ToolsList.Schema] = [
         
-        .init(command: .list_files,
+        .init(CoderCommand.list_files,
               description: "Use this tool if you need to find out what files are in the project. Tool returs a list of absolute paths of all the files.",
               inputSchema:
                 ToolParameter(type: .object,
                               properties: [:],
                               required: [])
              ),
-        .init(command: .find_file,
+        .init(CoderCommand.find_file,
               description: "Use this tool if you need to get absolute path for a file. Provide filename or its part and you will get absolute paths of matching files.",
               inputSchema:
                 ToolParameter(type: .object,
@@ -55,7 +63,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["filepath"])
              ),
-        .init(command: .read_file,
+        .init(CoderCommand.read_file,
               description: "Use this tool if you need to view the contents of an existing file.",
               inputSchema:
                 ToolParameter(type: .object,
@@ -64,7 +72,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["filepath"])
              ),
-        .init(command: .rename_file,
+        .init(CoderCommand.rename_file,
               description: "Use this tool if you need to chnage the file's name or move the file within the project",
               inputSchema:
                 ToolParameter(type: .object,
@@ -74,7 +82,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["oldFilepath", "newFilepath"])
              ),
-        .init(command: .override_file,
+        .init(CoderCommand.override_file,
               description: "Use this tool if you need to override the content of an existing file.",
               inputSchema:
                 ToolParameter(type: .object,
@@ -84,7 +92,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["filepath", "content"])
              ),
-        .init(command: .create_file,
+        .init(CoderCommand.create_file,
               description: "Create a new file. Only use this when a file doesn't exist and should be created",
               inputSchema:
                 ToolParameter(type: .object,
@@ -94,7 +102,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["filepath", "content"])
              ),
-        .init(command: .delete_file,
+        .init(CoderCommand.delete_file,
               description: "Use this tool if you need to completely delete a file",
               inputSchema:
                 ToolParameter(type: .object,
@@ -103,7 +111,7 @@ class CoderEngine: Engine {
                               ],
                               required: ["filepath"])
              ),
-        .init(command: .find_text_in_files,
+        .init(CoderCommand.find_text_in_files,
               description: "Use this tool if you need to search files in the project looking for a particular text. The result is a list of json (filepath, line, lineContent) containing paths to files that contain specified string toghether with part of the document that was matched ({\"filepath\": \"<PATH>\", \"mathingLine\": \"<LINE HERE>\"})",
               inputSchema:
                 ToolParameter(type: .object,
@@ -112,9 +120,12 @@ class CoderEngine: Engine {
                               ],
                               required: ["search"])
              ),
-    ])
+    ]
     
-    func call(_ command: CommandName, body: HttpRequestBody) throws -> ToolResult {
+    func call(_ command: String, body: HttpRequestBody) throws -> ToolResult {
+        guard let command = self.command(for: command) else {
+            return ToolResult([])
+        }
         let dto: ToolResult
         switch command {
         case .list_files:

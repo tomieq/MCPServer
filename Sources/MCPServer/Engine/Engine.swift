@@ -8,7 +8,8 @@ import Swifter
 
 protocol Engine {
     var instructions: String { get }
-    var tools: ToolsList { get }
-    func call(_ command: CommandName, body: HttpRequestBody) throws -> ToolResult
+    var tools: [ToolsList.Schema] { get }
+    func canHandle(_ command: String) -> Bool
+    func call(_ command: String, body: HttpRequestBody) throws -> ToolResult
 }
 
